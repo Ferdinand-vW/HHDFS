@@ -11,14 +11,16 @@ import qualified Data.ByteString.Lazy as B
 type BlockId = Int
 type Position = (ProcessId, BlockId)
 type FileData = B.ByteString
+type FileName = B.ByteString
 
 data HandShake = HandShake
   { sendPort :: SendPort CDNReq
   }
   deriving (Typeable, Generic)
 
-data ClientReq = Read FilePath (SendPort (Maybe Position))
-               | Write FilePath (SendPort Position)
+data ClientReq = Show (SendPort [FileName])
+               | Read FileName (SendPort (Maybe FileData))
+               | Write FileName (SendPort (BlockId, SendPort CDNReq))
   deriving (Typeable, Generic)
 
 data CDNReq = CDNRead BlockId (SendPort FileData)
