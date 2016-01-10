@@ -32,8 +32,7 @@ initNode p = do
     case args of
         [port,addr] ->      setupNode p "127.0.0.1" port addr
         [host,port,addr] -> setupNode p host port addr
-            
-        
+
 setupNode :: (ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
 setupNode p host port addr = do
     Right t <- createTransport host port defaultTCPParameters --setup transport layer for the node
@@ -55,4 +54,3 @@ setupNameNode p host port = do
         pid <- getSelfPid --Dynamically register the NameNode's ProcessId
         register "NameNodePid" pid
         p
-            

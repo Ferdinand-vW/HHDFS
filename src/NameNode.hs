@@ -36,9 +36,10 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 
 initializeDataNodes :: [NodeId] -> Process ProcessId
 initializeDataNodes nids = do
+  pid <- getSelfPid
   ps <- forM nids $ \nid -> do
     say $ printf "starting DataNode %s" (show nid)
-    spawn nid $(mkStaticClosure 'dataNode)
+    spawn nid ($(mkClosure 'dataNode) pid)
 
   spawnLocal $ clientHandler (NameNode ps M.empty)
 
