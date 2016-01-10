@@ -2,16 +2,20 @@
 
 module NameNode where
 
-import            Data.Map (Map)
-import qualified  Data.Map as M
 import            Control.Distributed.Process
 import            Control.Distributed.Process.Closure
-import            DataNode
+import            System.FilePath (takeFileName)
+import            Data.Map (Map)
+import qualified  Data.Map as M
 import            Control.Monad (forM)
 import            Text.Printf
-import            Messages (ClientReq(..), BlockId)
+import            Data.Char (ord)
 
-type Position = (ProcessId, BlockId)
+
+import            DataNode
+import            Messages (ClientReq(..), BlockId, Position)
+
+
 type FileName = String
 type FsImage = Map FileName Position
 
@@ -32,8 +36,6 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 --   let fsImg = read s :: FsImage
 --   return fsImg
 
--- do we really need a hearthbeat? what if the namenode simply starts up the datanods withMonitor
-
 initializeDataNodes :: [NodeId] -> Process ProcessId
 initializeDataNodes nids = do
   pid <- getSelfPid
@@ -43,14 +45,34 @@ initializeDataNodes nids = do
 
   spawnLocal $ clientHandler (NameNode ps M.empty)
 
-handleClientReq :: ClientReq -> Process ()
-handleClientReq (Write fp chan) = undefined
-handleClientReq (Read  fp) = undefined
+handleClientReq :: NameNode -> ClientReq -> Process ()
+handleClientReq nameNode@NameNode{..} (Write fp chan) = do
+  let
+    dnodePid = toPid dataNodes (takeFileName fp)
+    positions = M.elems fsImage
+    nextFreeBlockId = nextBidFor dnodePid positions
+  sendChan chan (dnodePid, nextFreeBlockId)
+
+handleClientReq nameNode@NameNode{..} (Read  fp chan) = do
+  let res = M.lookup fp fsImage
+  sendChan chan res
 
 clientHandler :: NameNode -> Process ()
-clientHandler nameNode = loop nameNode
+clientHandler nnode = loop nnode
   where
-    loop nameNode@NameNode{..} = do
+    loop nnode = do
       req <- expect :: Process ClientReq
-      handleClientReq req
-      loop nameNode
+      handleClientReq nnode req
+      loop nnode
+
+-- Another naive implementation to find the next free block id given a datanode
+-- This should be changed to something more robust and performant
+nextBidFor :: ProcessId -> [Position] -> BlockId
+nextBidFor pid positions = maximum (map toBid positions) + 1
+  where
+    toBid (nnodePid, blockId) = if nnodePid == pid then blockId else 0
+
+-- For the time being we can pick the dataNote where to store a file with this
+-- naive technique.
+toPid :: [ProcessId] -> String -> ProcessId
+toPid pids s = pids !! (ord (head s) `mod` length pids)
