@@ -10,5 +10,5 @@ main = do
     prog <- getArgs
     case prog of
         ["client"] -> initNode client
-        --["datanode"] -> initNode dataNode
+--        ["datanode"] -> initNode dataNode
         ["namenode"] -> initNameNode nameNode

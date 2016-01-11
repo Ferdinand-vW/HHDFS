@@ -14,6 +14,7 @@ type FileData = B.ByteString
 
 data HandShake = HandShake
   { dataNodeId :: ProcessId
+  , sendPort :: SendPort CDNReq
   }
   deriving (Typeable, Generic)
 

@@ -12,13 +12,14 @@ import            Text.Printf
 import            Data.Char (ord)
 
 import            DataNode
-import            Messages (ClientReq(..), BlockId, Position, HandShake(..))
+import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq)
 import            NodeInitialization
 
 type FsImage = Map FilePath Position
+type DataNodeMap = Map ProcessId (SendPort CDNReq)
 
 data NameNode = NameNode
-  { dataNodes :: [ProcessId]
+  { dataNodes :: DataNodeMap
   , fsImage :: FsImage
   }
 
@@ -34,7 +35,7 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 --   return fsImg
 
 nameNode :: Process ()
-nameNode = loop (NameNode [] M.empty)
+nameNode = loop (NameNode M.empty M.empty)
   where
     loop nnode = receiveWait
       [ match $ \clientReq -> do
@@ -46,7 +47,7 @@ nameNode = loop (NameNode [] M.empty)
       ]
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nnode@NameNode{..} (HandShake pid) = return $ NameNode (pid:dataNodes) fsImage
+handleDataNodes nnode@NameNode{..} (HandShake pid sp) = return $ nnode { dataNodes = M.insert pid sp dataNodes }
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
 handleClients nameNode@NameNode{..} (Write fp chan) = do
@@ -75,5 +76,5 @@ nextBidFor pid positions = maximum (map toBid positions) + 1
 
 -- For the time being we can pick the dataNote where to store a file with this
 -- naive technique.
-toPid :: [ProcessId] -> String -> ProcessId
-toPid pids s = pids !! (ord (head s) `mod` length pids)
+toPid :: DataNodeMap -> String -> ProcessId
+toPid pids s = undefined --pids !! (ord (head s) `mod` length pids)
