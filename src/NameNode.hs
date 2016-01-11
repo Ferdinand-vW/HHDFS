@@ -46,14 +46,15 @@ nameNode = loop (NameNode [] M.empty)
       ]
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nnode@NameNode{..} (HandShake pid) = return $ NameNode (pid:dataNodes) fsImage
+handleDataNodes nnode@NameNode{..} (HandShake pid) = return $
+  NameNode (pid:dataNodes) fsImage
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
 handleClients nameNode@NameNode{..} (Write fp chan) = do
   let
-    dnodePid = toPid dataNodes (takeFileName fp)
-    positions = M.elems fsImage
-    nextFreeBlockId = nextBidFor dnodePid positions
+    dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
+    positions = M.elems fsImage -- grab the list of positions
+    nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
   sendChan chan (dnodePid, nextFreeBlockId)
   return nameNode
 
