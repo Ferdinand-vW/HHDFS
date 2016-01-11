@@ -56,8 +56,9 @@ handleClients nameNode@NameNode{..} (Write fp chan) = do
     dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
     positions = M.elems fsImage -- grab the list of positions
     nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
-  sendChan chan (dnodePid, nextFreeBlockId)
-  return nameNode
+    newPosition = (dnodePid, nextFreeBlockId)
+  sendChan chan newPosition
+  return $ NameNode dataNodes (M.insert fp newPosition fsImage)
 
 handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
