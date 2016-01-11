@@ -12,13 +12,10 @@ import Messages
 
 dataNode :: ProcessId -> Process ()
 dataNode nnid = do
-  -- Send WhereIsReply with the ProcessId of the data node
   pid <- getSelfPid
-  send nnid $ WhereIsReply "" (Just pid)
-
-  -- Create a channel, and send the sendPort to the data node
   (sendPort, receivePort) <- newChan
-  send nnid $ HandShake sendPort
+
+  send nnid $ HandShake pid sendPort
 
   handleMessages receivePort
 
@@ -38,5 +35,3 @@ handleMessages receivePort = forever $ do
 
 getFileName :: BlockId -> FilePath
 getFileName bid = "./data/" ++ show bid ++ ".dat"
-
-remotable ['dataNode]

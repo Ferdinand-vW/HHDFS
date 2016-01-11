@@ -12,10 +12,11 @@ import            Text.Printf
 import            Data.Char (ord)
 
 import            DataNode
-import            Messages (ClientReq(..), BlockId, Position, HandShake(..))
+import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq)
 import            NodeInitialization
 
 type FsImage = Map FilePath Position
+type DataNodeMap = Map ProcessId (SendPort CDNReq)
 
 data NameNode = NameNode
   { dataNodes :: [ProcessId]
