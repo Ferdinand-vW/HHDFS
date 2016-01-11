@@ -3,7 +3,7 @@ module DataNode where
 import Control.Distributed.Process
 import Control.Distributed.Process.Closure
 import qualified Data.ByteString.Lazy as B
-import System.Directory (doesFileExist, removeFile)
+import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import Control.Monad (when, forever)
 
 import Messages
@@ -13,7 +13,7 @@ dataNode nnid = do
   pid <- getSelfPid
   send nnid $ HandShake pid
 
-  liftIO $ createDirectoryIfMissing false "./data"
+  liftIO $ createDirectoryIfMissing False "./data"
   handleMessages
 
 
