@@ -47,8 +47,8 @@ nameNode = loop (NameNode [] M.empty)
       ]
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nnode@NameNode{..} (HandShake pid) = return $
-  NameNode (pid:dataNodes) fsImage
+handleDataNodes nameNode@NameNode{..} (HandShake pid) = return $
+  nameNode { dataNodes = pid:dataNodes }
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
 handleClients nameNode@NameNode{..} (Write fp chan) = do
@@ -58,7 +58,7 @@ handleClients nameNode@NameNode{..} (Write fp chan) = do
     nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
     newPosition = (dnodePid, nextFreeBlockId)
   sendChan chan newPosition
-  return $ NameNode dataNodes (M.insert fp newPosition fsImage)
+  return $ nameNode { fsImage = M.insert fp newPosition fsImage }
 
 handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
