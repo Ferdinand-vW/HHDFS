@@ -18,7 +18,7 @@ data HandShake = HandShake
   }
   deriving (Typeable, Generic)
 
-data ClientReq = Show (SendPort [FileName])
+data ClientReq = ListFiles (SendPort [FileName])
                | Read FileName (SendPort (Maybe FileData))
                | Write FileName (SendPort (BlockId, SendPort CDNReq))
   deriving (Typeable, Generic)
