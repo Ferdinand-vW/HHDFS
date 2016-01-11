@@ -37,7 +37,7 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 nameNode :: Process ProcessId
 nameNode = loop (NameNode [] M.empty)
   where
-    loop nnode = forever $ receiveWait
+    loop nnode = receiveWait
       [ match $ \clientReq -> loop $ handleClients nnode req
       , match $ \handShake -> loop $ handleDataNodes nnode handShake
       ]
