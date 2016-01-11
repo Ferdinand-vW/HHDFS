@@ -20,6 +20,7 @@ data HandShake = HandShake
 data ClientReq = ListFiles (SendPort [FilePath])
                | Read FilePath (SendPort ClientRes)
                | Write FilePath (SendPort ClientRes)
+               | Shutdown
   deriving (Typeable, Generic)
 
 type ClientRes = Either ClientError Position

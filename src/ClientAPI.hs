@@ -2,7 +2,8 @@ module ClientAPI
 (
 listFilesReq,
 writeFileReq,
-readFileReq
+readFileReq,
+shutdownReq
 ) where
 
 import Control.Distributed.Process
@@ -47,3 +48,7 @@ readFileReq pid fpath = do
       send pid (CDNRead bid sp) --Send a read request to the datanode
       fdata <- receiveChan rp --Receive the file
       return $ Just fdata
+
+shutdownReq :: ProcessId -> Process ()
+shutdownReq pid = send pid Shutdown  -- Send a shutdown request to the name node
+                                      -- This will close every node in the network

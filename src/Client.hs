@@ -9,7 +9,7 @@ import Control.Concurrent
 import System.FilePath (takeFileName)
 import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import qualified Data.ByteString.Lazy.Char8 as B
-import ClientAPI (listFilesReq,writeFileReq,readFileReq)
+import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
 import Messages
 
 -- Example client
@@ -27,6 +27,7 @@ client pid = do
         writeToDisk path mfdata --Write file to disk
         client pid --Read a file from the network
     ["quit"] -> liftIO $ putStrLn "Closing program..." >> threadDelay 2000000 --Print a message and after 2 seconds quit
+    ["shutdown"] -> liftIO (putStrLn "Shutting down Network...") >> shutdownReq pid >> terminate
     _ -> liftIO (putStrLn "Input was not a valid command.") >> client pid
 
 

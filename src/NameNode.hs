@@ -4,6 +4,7 @@ module NameNode where
 
 import            Control.Distributed.Process
 import            Control.Distributed.Process.Closure
+import            Control.Concurrent
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
@@ -75,10 +76,12 @@ handleClients nameNode@NameNode{..} (Read  fp chan) = do
       sendChan chan (Right f)
       return nameNode
 
-
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
   sendChan chan (M.keys fsImage)
   return nameNode
+
+handleClients nameNode@NameNode{..} Shutdown =
+  mapM_ (`kill` "User shutdown") dataNodes >> liftIO (threadDelay 20000) >> terminate
 
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
