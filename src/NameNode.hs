@@ -11,7 +11,6 @@ import            Control.Monad (forM)
 import            Text.Printf
 import            Data.Char (ord)
 
-
 import            DataNode
 import            Messages (ClientReq(..), BlockId, Position)
 

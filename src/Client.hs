@@ -1,13 +1,13 @@
+module Client where
+
 import Control.Distributed.Process
 import Control.Concurrent (threadDelay)
 import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as B
+import System.Environment (getArgs)
 import System.FilePath (takeFileName)
 import Messages
-import NodeInitialization
-
-
-main = initNode client
+import NodeInitialization (setupNode)
 
 --Main loop
 client :: ProcessId -> Process ()
