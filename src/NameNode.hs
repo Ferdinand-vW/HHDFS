@@ -71,6 +71,7 @@ handleClients nameNode@NameNode{..} (ListFiles chan) = do
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
 nextBidFor :: ProcessId -> [Position] -> BlockId
+nextBidFor pid []        = 0
 nextBidFor pid positions = maximum (map toBid positions) + 1
   where
     toBid (nnodePid, blockId) = if nnodePid == pid then blockId else 0
