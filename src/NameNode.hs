@@ -4,7 +4,7 @@ module NameNode where
 
 import            Control.Distributed.Process
 import            Control.Distributed.Process.Closure
-import            System.FilePath (takeFileName)
+import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
 import            Control.Monad (forM, forever)
@@ -12,7 +12,7 @@ import            Text.Printf
 import            Data.Char (ord)
 
 import            DataNode
-import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq)
+import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq, ClientRes, ClientError(..))
 import            NodeInitialization
 
 type FsImage = Map FilePath Position
@@ -51,19 +51,30 @@ handleDataNodes nameNode@NameNode{..} (HandShake pid) = return $
   nameNode { dataNodes = pid:dataNodes }
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
-handleClients nameNode@NameNode{..} (Write fp chan) = do
-  let
-    dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
-    positions = M.elems fsImage -- grab the list of positions
-    nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
-    newPosition = (dnodePid, nextFreeBlockId)
-  sendChan chan newPosition
-  return $ nameNode { fsImage = M.insert fp newPosition fsImage }
+handleClients nameNode@NameNode{..} (Write fp chan) =
+  if not $ isValid fp
+  then do
+    sendChan chan (Left InvalidPathError)
+    return nameNode
+  else do
+    let
+      dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
+      positions = M.elems fsImage -- grab the list of positions
+      nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
+      newPosition = (dnodePid, nextFreeBlockId)
+    sendChan chan (Right newPosition)
+    return $ nameNode { fsImage = M.insert fp newPosition fsImage }
 
 handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
-  sendChan chan res
-  return nameNode
+  case res of
+    Nothing -> do
+      sendChan chan (Left FileNotFound)
+      return nameNode
+    Just f -> do
+      sendChan chan (Right f)
+      return nameNode
+
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
   sendChan chan (M.keys fsImage)

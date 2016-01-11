@@ -18,9 +18,15 @@ data HandShake = HandShake
   deriving (Typeable, Generic)
 
 data ClientReq = ListFiles (SendPort [FilePath])
-               | Read FilePath (SendPort (Maybe Position))
-               | Write FilePath (SendPort Position)
+               | Read FilePath (SendPort ClientRes)
+               | Write FilePath (SendPort ClientRes)
   deriving (Typeable, Generic)
+
+type ClientRes = Either ClientError Position
+
+data ClientError = InvalidPathError
+                 | FileNotFound
+  deriving (Typeable, Generic, Show)
 
 data CDNReq = CDNRead BlockId (SendPort FileData)
             | CDNWrite BlockId FileData
@@ -28,5 +34,6 @@ data CDNReq = CDNRead BlockId (SendPort FileData)
   deriving (Typeable, Generic)
 
 instance Binary HandShake
+instance Binary ClientError
 instance Binary ClientReq
 instance Binary CDNReq

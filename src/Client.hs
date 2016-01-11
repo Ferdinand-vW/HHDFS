@@ -21,20 +21,20 @@ client pid = do
       fsimage <- listFilesReq pid --get the filenames from the namenode
       showFSImage fsimage
       client pid
-    ["write",path] -> writeFileReq pid path >> client pid --Write a file onto the network
+    ["write",localFile,remotePath] -> writeFileReq pid localFile remotePath >> client pid --Write a file onto the network
     ["read",path] -> do
         mfdata <- readFileReq pid path --Retrieve the file
         writeToDisk path mfdata --Write file to disk
         client pid --Read a file from the network
     ["quit"] -> liftIO $ putStrLn "Closing program..." >> threadDelay 2000000 --Print a message and after 2 seconds quit
     _ -> liftIO (putStrLn "Input was not a valid command.") >> client pid
-    
+
 
 --Simply prints out all the filenames prefixed with 2 spaces
 showFSImage :: [FilePath] -> Process ()
 showFSImage fsimage = do
   mapM_ (\x -> liftIO . putStrLn $ "  " ++ x) fsimage
-  
+
 writeToDisk :: FilePath -> Maybe FileData -> Process ()
 writeToDisk fpath mfdata = do
     case mfdata of
@@ -43,4 +43,3 @@ writeToDisk fpath mfdata = do
             let fname = takeFileName fpath
             liftIO $ createDirectoryIfMissing False "./local"
             liftIO $ B.writeFile ("./local/" ++ fname) fdata
-    
