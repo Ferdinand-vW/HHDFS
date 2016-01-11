@@ -1,5 +1,6 @@
 data
 dist
+local
 cabal-dev
 *~
 *.exe
