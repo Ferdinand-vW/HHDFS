@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module DataNode where
 
 import Control.Distributed.Process
@@ -13,15 +11,14 @@ import Messages
 dataNode :: ProcessId -> Process ()
 dataNode nnid = do
   pid <- getSelfPid
-  (sendPort, receivePort) <- newChan
+  send nnid $ HandShake pid
 
-  send nnid $ HandShake pid sendPort
+  handleMessages
 
-  handleMessages receivePort
 
-handleMessages :: ReceivePort CDNReq -> Process ()
-handleMessages receivePort = forever $ do
-  msg <- receiveChan receivePort
+handleMessages :: Process ()
+handleMessages = forever $ do
+  msg <- expect
   case msg of
     CDNRead bid sendPort -> do
       file <- liftIO $ B.readFile (getFileName bid)
