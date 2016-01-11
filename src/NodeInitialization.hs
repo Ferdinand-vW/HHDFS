@@ -39,11 +39,11 @@ setupNode p host port addr = do
     let nnAddr = EndPointAddress $ pack addr
         nodeid = NodeId nnAddr --Create a NodeId for the NameNode
     runProcess node $ do --We start a process on the node
-    whereisRemoteAsync nodeid "NameNodePid" --See if we can find the NameNode and if so get his ProcessId
-    WhereIsReply _ mpid <- expect :: Process WhereIsReply
-    case mpid of
-        Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
-        Just pid -> p pid --Continue with the given Process and pass it the NameNode ProcessId
+      whereisRemoteAsync nodeid "NameNodePid" --See if we can find the NameNode and if so get his ProcessId
+      WhereIsReply _ mpid <- expect :: Process WhereIsReply
+      case mpid of
+          Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
+          Just pid -> p pid --Continue with the given Process and pass it the NameNode ProcessId
         
 setupNameNode :: Process () -> Host -> Port -> IO ()
 setupNameNode p host port = do

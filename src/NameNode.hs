@@ -1,5 +1,7 @@
 {-# LANGUAGE RecordWildCards#-}
 
+module NameNode where
+
 import            Control.Distributed.Process
 import            Control.Distributed.Process.Closure
 import            System.FilePath (takeFileName)
@@ -10,18 +12,15 @@ import            Text.Printf
 import            Data.Char (ord)
 
 import            DataNode
-import            Messages (ClientReq(..), BlockId, Position)
+import            Messages (ClientReq(..), BlockId, Position, HandShake(..))
 import            NodeInitialization
 
-type FileName = String
-type FsImage = Map FileName Position
+type FsImage = Map FilePath Position
 
 data NameNode = NameNode
   { dataNodes :: [ProcessId]
   , fsImage :: FsImage
   }
-
-main = initNameNode nameNode
 
 flushFsImage :: FsImage -> IO ()
 flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
@@ -34,16 +33,20 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 --   let fsImg = read s :: FsImage
 --   return fsImg
 
-nameNode :: Process ProcessId
+nameNode :: Process ()
 nameNode = loop (NameNode [] M.empty)
   where
     loop nnode = receiveWait
-      [ match $ \clientReq -> loop $ handleClients nnode req
-      , match $ \handShake -> loop $ handleDataNodes nnode handShake
+      [ match $ \clientReq -> do
+          newNnode <- handleClients nnode clientReq
+          loop newNnode
+      , match $ \handShake -> do
+           newNnode <- handleDataNodes nnode handShake
+           loop newNnode
       ]
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nnode@NameNode{..} (HandShake pid) = return $ NameNode pid:dataNodes fsImage
+handleDataNodes nnode@NameNode{..} (HandShake pid) = return $ NameNode (pid:dataNodes) fsImage
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
 handleClients nameNode@NameNode{..} (Write fp chan) = do
@@ -57,6 +60,10 @@ handleClients nameNode@NameNode{..} (Write fp chan) = do
 handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
   sendChan chan res
+  return nameNode
+
+handleClients nameNode@NameNode{..} (ListFiles chan) = do
+  sendChan chan (M.keys fsImage)
   return nameNode
 
 -- Another naive implementation to find the next free block id given a datanode
