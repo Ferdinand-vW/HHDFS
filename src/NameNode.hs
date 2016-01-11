@@ -1,19 +1,17 @@
-{-# LANGUAGE TemplateHaskell, RecordWildCards#-}
-
-module NameNode where
+{-# LANGUAGE RecordWildCards#-}
 
 import            Control.Distributed.Process
 import            Control.Distributed.Process.Closure
 import            System.FilePath (takeFileName)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (forM)
+import            Control.Monad (forM, forever)
 import            Text.Printf
 import            Data.Char (ord)
 
 import            DataNode
 import            Messages (ClientReq(..), BlockId, Position)
-
+import            NodeInitialization
 
 type FileName = String
 type FsImage = Map FileName Position
@@ -23,6 +21,7 @@ data NameNode = NameNode
   , fsImage :: FsImage
   }
 
+main = initNameNode nameNode
 
 flushFsImage :: FsImage -> IO ()
 flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
@@ -35,34 +34,30 @@ flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
 --   let fsImg = read s :: FsImage
 --   return fsImg
 
-initializeDataNodes :: [NodeId] -> Process ProcessId
-initializeDataNodes nids = do
-  pid <- getSelfPid
-  ps <- forM nids $ \nid -> do
-    say $ printf "starting DataNode %s" (show nid)
-    spawn nid ($(mkClosure 'dataNode) pid)
+nameNode :: Process ProcessId
+nameNode = loop (NameNode [] M.empty)
+  where
+    loop nnode = receiveWait
+      [ match $ \clientReq -> loop $ handleClients nnode req
+      , match $ \handShake -> loop $ handleDataNodes nnode handShake
+      ]
 
-  spawnLocal $ clientHandler (NameNode ps M.empty)
+handleDataNodes :: NameNode -> HandShake -> Process NameNode
+handleDataNodes nnode@NameNode{..} (HandShake pid) = return $ NameNode pid:dataNodes fsImage
 
-handleClientReq :: NameNode -> ClientReq -> Process ()
-handleClientReq nameNode@NameNode{..} (Write fp chan) = do
+handleClients :: NameNode -> ClientReq -> Process NameNode
+handleClients nameNode@NameNode{..} (Write fp chan) = do
   let
     dnodePid = toPid dataNodes (takeFileName fp)
     positions = M.elems fsImage
     nextFreeBlockId = nextBidFor dnodePid positions
   sendChan chan (dnodePid, nextFreeBlockId)
+  return nameNode
 
-handleClientReq nameNode@NameNode{..} (Read  fp chan) = do
+handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
   sendChan chan res
-
-clientHandler :: NameNode -> Process ()
-clientHandler nnode = loop nnode
-  where
-    loop nnode = do
-      req <- expect :: Process ClientReq
-      handleClientReq nnode req
-      loop nnode
+  return nameNode
 
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant

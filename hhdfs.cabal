@@ -22,8 +22,12 @@ executable hhdfs
   build-depends:       base >=4.8 && <4.9
                      , distributed-process
                      , distributed-process-simplelocalnet
+                     , network-transport-tcp
+                     , network-transport
                      , containers
                      , binary
                      , filepath
+                     , bytestring
+                     , directory
   hs-source-dirs:      src
   default-language:    Haskell2010
