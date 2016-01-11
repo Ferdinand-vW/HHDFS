@@ -9,6 +9,6 @@ import NodeInitialization
 main = do
     prog <- getArgs
     case prog of
-        ["client"] -> initNode client
-        ["datanode"] -> initNode dataNode
-        ["namenode"] -> initNameNode nameNode
+        ["client",host,port,addr] -> setupNode client host port addr
+        ["datanode",host,port,addr] -> setupNode dataNode host port addr
+        ["namenode",host,port] -> setupNameNode nameNode host port

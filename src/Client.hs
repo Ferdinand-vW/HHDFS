@@ -7,6 +7,7 @@ where
 import Control.Distributed.Process
 import Control.Concurrent
 import System.FilePath (takeFileName)
+import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import qualified Data.ByteString.Lazy.Char8 as B
 import ClientAPI (listFilesReq,writeFileReq,readFileReq)
 import Messages
@@ -40,5 +41,6 @@ writeToDisk fpath mfdata = do
         Nothing -> liftIO $ putStrLn "Could not find file on network"
         Just fdata -> do
             let fname = takeFileName fpath
-            liftIO $ B.writeFile ("./data/" ++ fname) fdata
+            liftIO $ createDirectoryIfMissing False "./local"
+            liftIO $ B.writeFile ("./local/" ++ fname) fdata
     

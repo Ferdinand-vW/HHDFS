@@ -1,7 +1,7 @@
 module NodeInitialization
 (
-initNode,
-initNameNode
+setupNode,
+setupNameNode
 )
 where
 
@@ -14,23 +14,6 @@ import Data.ByteString.Char8 (pack)
 type Host = String
 type Port = String
 type Addr = String
-
---Use this function to startup the NameNode
-initNameNode :: Process () -> IO ()
-initNameNode p = do
-    args <- getLine
-    case words args of
-        [port] ->      setupNameNode p "127.0.0.1" port
-        [host,port] -> setupNameNode p host port
-
---Use this function to startup any other node (DataNode/Client)
-initNode :: (ProcessId -> Process ()) -> IO ()
-initNode p = do
-    args <- getLine
-    --address should be of the form: host:port:0
-    case words args of
-        [port,addr] -> setupNode p "127.0.0.1" port addr
-        [host,port,addr] -> setupNode p host port addr
 
 setupNode :: (ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
 setupNode p host port addr = do
