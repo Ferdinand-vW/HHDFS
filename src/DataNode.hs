@@ -13,6 +13,7 @@ dataNode nnid = do
   pid <- getSelfPid
   send nnid $ HandShake pid
 
+  liftIO $ createDirectoryIfMissing false "./data"
   handleMessages
 
 
