@@ -10,10 +10,10 @@ import Control.Distributed.Process
 import qualified Data.ByteString.Lazy.Char8 as B
 import Messages
 
-listFilesReq :: ProcessId -> Process [FilePath]
-listFilesReq pid = do
+listFilesReq :: ProcessId -> FilePath -> Process [File]
+listFilesReq pid fp = do
   (sendPort,receivePort) <- newChan
-  send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
+  send pid (ListFiles fp sendPort) --Ask the Namenode for the fsimage
   receiveChan receivePort --Wait to receive the fsimage
 
 writeFileReq :: ProcessId -> FilePath -> FilePath -> Process ()

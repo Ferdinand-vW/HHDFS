@@ -17,8 +17,8 @@ client :: ProcessId -> Process ()
 client pid = do
   input <- liftIO $ getLine --parse some input
   case words input of
-    ["show"] -> do
-      fsimage <- listFilesReq pid --get the filenames from the namenode
+    ["show", dir] -> do
+      fsimage <- listFilesReq pid dir --get the filenames from the namenode
       showFSImage fsimage
       client pid
     ["write",localFile,remotePath] -> writeFileReq pid localFile remotePath >> client pid --Write a file onto the network
@@ -32,9 +32,9 @@ client pid = do
 
 
 --Simply prints out all the filenames prefixed with 2 spaces
-showFSImage :: [FilePath] -> Process ()
+showFSImage :: [File] -> Process ()
 showFSImage fsimage = do
-  mapM_ (\x -> liftIO . putStrLn $ "  " ++ x) fsimage
+  mapM_ (\x -> liftIO . putStrLn $ "  " ++ show x) fsimage
 
 writeToDisk :: FilePath -> Maybe FileData -> Process ()
 writeToDisk fpath mfdata = do

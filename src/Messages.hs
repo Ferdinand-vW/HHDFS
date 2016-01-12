@@ -8,6 +8,7 @@ import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Lazy as B
 
+type FileName = String
 type BlockId = Int
 type Position = (ProcessId, BlockId)
 type FileData = B.ByteString
@@ -17,7 +18,16 @@ data HandShake = HandShake
   }
   deriving (Typeable, Generic)
 
-data ClientReq = ListFiles (SendPort [FilePath])
+data File = File
+  { name :: FileName
+  , position :: Position
+  }
+  deriving (Typeable, Generic)
+
+instance Show File where
+  show (File n p) = n ++ show p
+
+data ClientReq = ListFiles FilePath (SendPort [File])
                | Read FilePath (SendPort ClientRes)
                | Write FilePath (SendPort ClientRes)
                | Shutdown
@@ -27,6 +37,7 @@ type ClientRes = Either ClientError Position
 
 data ClientError = InvalidPathError
                  | FileNotFound
+                 | DirectoryNotFound
   deriving (Typeable, Generic, Show)
 
 data CDNReq = CDNRead BlockId (SendPort FileData)
@@ -36,5 +47,6 @@ data CDNReq = CDNRead BlockId (SendPort FileData)
 
 instance Binary HandShake
 instance Binary ClientError
+instance Binary File
 instance Binary ClientReq
 instance Binary CDNReq
