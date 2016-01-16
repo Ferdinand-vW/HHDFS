@@ -7,7 +7,7 @@ where
 import Control.Distributed.Process
 import Control.Concurrent
 import System.FilePath (takeFileName)
-import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing)
 import qualified Data.ByteString.Lazy.Char8 as B
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
 import Messages

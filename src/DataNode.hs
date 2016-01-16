@@ -1,8 +1,7 @@
 module DataNode where
 
 import Control.Distributed.Process
-import Control.Distributed.Process.Closure
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.Char8 as B
 import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import Control.Monad (when, forever)
 

@@ -8,9 +8,15 @@ import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Lazy as B
 
+-- Block size in bytes. For now, very small for testing purposes
+blockSize :: Integer
+blockSize = 32
+
 type BlockId = Int
+type BlockCount = Int
 type Position = (ProcessId, BlockId)
 type FileData = B.ByteString
+
 
 data HandShake = HandShake
   { dataNodeId :: ProcessId
@@ -18,12 +24,12 @@ data HandShake = HandShake
   deriving (Typeable, Generic)
 
 data ClientReq = ListFiles (SendPort [FilePath])
-               | Read FilePath (SendPort ClientRes)
-               | Write FilePath (SendPort ClientRes)
+               | Read FilePath (SendPort (ClientRes [Position]))
+               | Write FilePath BlockCount (SendPort (ClientRes [Position]))
                | Shutdown
   deriving (Typeable, Generic)
 
-type ClientRes = Either ClientError Position
+type ClientRes a = Either ClientError a
 
 data ClientError = InvalidPathError
                  | FileNotFound
