@@ -6,7 +6,7 @@ import Data.Typeable
 import GHC.Generics
 import Data.Binary (Binary)
 import Control.Distributed.Process
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Char8 as B
 
 type BlockId = Int
 type Position = (ProcessId, BlockId)
@@ -32,9 +32,14 @@ data ClientError = InvalidPathError
 data CDNReq = CDNRead BlockId (SendPort FileData)
             | CDNWrite BlockId FileData
             | CDNDelete BlockId
+            | CDNRep BlockId [ProcessId]
+  deriving (Typeable, Generic)
+  
+data BlockReport = BlockReport ProcessId [BlockId]
   deriving (Typeable, Generic)
 
 instance Binary HandShake
 instance Binary ClientError
 instance Binary ClientReq
 instance Binary CDNReq
+instance Binary BlockReport
