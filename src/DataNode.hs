@@ -2,7 +2,7 @@ module DataNode where
 
 import Control.Concurrent.STM
 import Control.Distributed.Process
-import Control.Distributed.Process.Closure
+
 import qualified Data.ByteString.Char8 as B
 import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import Control.Monad (when, forever, unless)

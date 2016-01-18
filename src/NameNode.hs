@@ -3,7 +3,6 @@
 module NameNode where
 
 import            Control.Distributed.Process
-import            Control.Distributed.Process.Closure
 import            Control.Concurrent
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
@@ -11,23 +10,23 @@ import qualified  Data.Map as M
 import            Control.Monad (forM, forever, unless)
 import qualified  Data.Set as S
 import            Text.Printf
+
 import            Data.Char (ord)
 import            Data.Maybe
 import            Data.Binary
 import            System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 
 
-import            DataNode
 import            Messages
-import            NodeInitialization
 
 
 repFactor :: Int
 repFactor = 2
 
-type FsImage = Map FilePath BlockId
+type FsImage = Map FilePath [BlockId]
 type BlockMap = Map BlockId (S.Set DataNodeId)
 type DataNodeIdPidMap = Map DataNodeId ProcessId
+
 
 data NameNode = NameNode
   { dataNodes :: [DataNodeId]
@@ -71,7 +70,6 @@ readDnMap = do
   unless fileExist $ liftIO $ flushDnMap M.empty
   decodeFile dnMapFile
 
-
 nameNode :: Process ()
 nameNode = do
   liftIO $ createDirectoryIfMissing False nnDataDir
@@ -107,27 +105,24 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
     nextDnId a = maximum a + 1
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
-handleClients nameNode@NameNode{..} (Write fp chan) =
+handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
   if not $ isValid fp
   then do
     sendChan chan (Left InvalidPathError)
     return nameNode
   else do
     let
-      dnodeId = toDnId dataNodes (takeFileName fp) -- pick a data node where to store the file
-      positions = map (\(k,a) -> (head $ S.toList a,k)) (M.toList blockMap) -- grab the list of positions
-      nextFreeBlockId = nextBidFor dnodeId positions -- calculate the next free block id for that data node
-      dnodePid = fromMaybe (error "This should never happen.") $ M.lookup dnodeId dnIdPidMap
-      response = (dnodePid, nextFreeBlockId)
-      newfsImage = M.insert fp nextFreeBlockId fsImage
-      newBlocKMap = M.insert nextFreeBlockId (S.singleton dnodeId) blockMap
-    sendChan chan (Right response)
+      dnodePids = mapMaybe (`M.lookup` dnIdPidMap) dataNodes
+      selectedDnodes = take blockCount $ map (toPid dnodePids (takeFileName fp)) [0..]
+      positions = zip selectedDnodes [(length $ M.keys blockMap)..]
+
+      newfsImage = M.insert fp (map snd positions) fsImage
+    sendChan chan (Right positions)
     liftIO $ flushFsImage newfsImage
-    liftIO $ flushBlockMap newBlocKMap
 
     return $ nameNode
-        { fsImage = newfsImage
-        , blockMap =  newBlocKMap}
+        { fsImage = newfsImage }
+
 
 
 handleClients nameNode@NameNode{..} (Read fp chan) = do
@@ -137,22 +132,14 @@ handleClients nameNode@NameNode{..} (Read fp chan) = do
       sendChan chan (Left FileNotFound)
       return nameNode
 
-    Just bid -> do
+    Just bids -> do
       --We can either lookup twice or lookup once after a union
-      let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
-      case mpids of
-        Nothing -> do
-          say "Was not able to find any ProcessId's that contain that file."
-          sendChan chan (Left FileNotFound)
-          return nameNode
-        Just dnodeIds -> do
-          case M.lookup (head $ S.toList dnodeIds) dnIdPidMap of
-            Nothing -> do
-              sendChan chan (Left InconsistentNetwork)
-              return nameNode
-            Just pid -> do
-              sendChan chan (Right $ (pid, bid))
-              return nameNode
+      --let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
+      let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union blockMap repMap, bid)) bids
+
+      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdPidMap, bid)) mpids
+      sendChan chan (Right res)
+      return nameNode
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
   sendChan chan (M.keys fsImage)
@@ -205,16 +192,15 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 
 
 
-
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
-nextBidFor :: DataNodeId -> [Position] -> BlockId
+nextBidFor :: DataNodeId -> [LocalPosition] -> BlockId
 nextBidFor pid []        = 0
 nextBidFor pid positions = maximum (map toBid positions) + 1
   where
     toBid (nnodePid, blockId) = if nnodePid == pid then blockId else 0
 
--- For the time being we can pick the dataNote where to store a file with this
+-- For the time being we can pick the dataNode where to store a file with this
 -- naive technique.
-toDnId :: [DataNodeId] -> String -> DataNodeId
-toDnId pids s = pids !! (ord (head s) `mod` length pids)
+toPid :: [ProcessId] -> String -> Int -> ProcessId
+toPid pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
