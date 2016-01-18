@@ -26,7 +26,7 @@ writeFileReq pid localFile remotePath = do
   fdata <- liftIO $ B.readFile localFile --Read file into memory (lazily)
 
   flength <- liftIO $ IO.withFile localFile IO.ReadMode IO.hFileSize
-  let blockCount = fromIntegral (flength `div` blockSize)
+  let blockCount = 1 + fromIntegral (flength `div` blockSize)
 
   (sendPort,receivePort) <- newChan
   send pid (Write remotePath blockCount sendPort) --Send a write request to the namenode
@@ -48,14 +48,12 @@ readFileReq pid fpath = do
   send pid (Read fpath sendPort) --Send a Read request to the namenode
 
   mexists <- receiveChan receivePort --Receive the file location
-  say $ show mexists
 
   let readBlock :: FileData -> RemotePosition -> Process FileData
       readBlock bs (pid,bid) = do
         (sp,rp) <- newChan
         send pid (CDNRead bid sp) --Send a read request to the datanode
         fdata <- receiveChan rp --Receive the file
-        say $ "received " ++ (show fdata)
         return $ B.append bs fdata -- TODO appending here is probably slow
 
   case mexists of
