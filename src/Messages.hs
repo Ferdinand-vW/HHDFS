@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, DeriveGeneric#-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 
 module Messages where
 

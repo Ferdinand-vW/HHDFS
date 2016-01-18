@@ -22,7 +22,7 @@ handleMessages :: ProcessId -> ProcessId -> Process ()
 handleMessages nnid myid = do
   blocksT <- liftIO $ newTVarIO []
   forever $ do
-    msg <- expect
+    msg <- expect :: Process CDNReq
     case msg of
       CDNRep bid pids -> do
         file <- liftIO $ B.readFile (getFileName bid)

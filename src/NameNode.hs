@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards#-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
 
 module NameNode where
 
@@ -46,13 +46,13 @@ nameNode :: Process ()
 nameNode = loop (NameNode [] M.empty M.empty M.empty)
   where
     loop nnode = receiveWait
-      [ match $ \clientReq -> do
+      [ match $ \(clientReq :: ClientReq) -> do
           newNnode <- handleClients nnode clientReq
           loop newNnode
-      , match $ \handShake -> do
+      , match $ \(handShake :: HandShake) -> do
           newNnode <- handleDataNodes nnode handShake
           loop newNnode
-      , match $ \blockreport -> do
+      , match $ \(blockreport :: BlockReport) -> do
           newNnode <- handleBlockReport nnode blockreport
           loop newNnode
       ]
@@ -106,21 +106,21 @@ handleClients nameNode@NameNode{..} Shutdown =
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> Process NameNode
 handleBlockReport nameNode@NameNode{..} (BlockReport pid blocks) = do
-  --If a BlockId from the given list of BlockId's exists in the current Map, then we simply
-  --add the given ProcessId to the Set of ProcessId's corresponding to that BlockId.
-  --For the repmap, if a BlockId doesn't already exist then we ignore it. Whereas
-  --we insert a new entry into the blockmap.
-  let repmap = foldr (\x y -> if M.member x y
-                                then M.adjust (\set -> S.insert pid set) x y
-                                else y) repMap blocks
-      blockmap  = foldr (\x y -> if M.member x y
-                                then M.adjust (\set -> S.insert pid set) x y
-                                else M.insert x (S.singleton pid) y) blockMap blocks
+  --First we have to determine whether to add a block to BlockMap or RepMap. If the block
+  --already exists in the RepMap, then we add the ProcessId to the corresponding set. If not,
+  --we try the same for the BlockMap. If it exists in neither then it has to be a new BlockId
+  --and therefore we add it to the BlockMap
+  let (blockmap,repmap) = 
+        foldr (\x (bl,rep) -> if M.member x rep
+                                then (bl,M.adjust (\set -> S.insert pid set) x rep)
+                                else if M.member x bl
+                                  then (M.adjust (\set -> S.insert pid set) x bl,rep)
+                                  else (M.insert x (S.singleton pid) bl,rep)) (blockMap,repMap) blocks
       --We are done with incorporating the blockreport into the maps, but we possibly have to move
       --entries from the repmap to the blockmap and vica versa.
       --First we partition both maps on how many ProcessId's contain a BlockId
       (toblmap,repmap') = M.partition (\x -> S.size x >= repFactor + 1) repmap
-      (torepmap,blockmap') = M.partition (\x -> S.size x <= repFactor + 1) blockmap
+      (torepmap,blockmap') = M.partition (\x -> S.size x <= repFactor) blockmap
       --Next we union the results
       newBlMap = M.unionWith S.union toblmap blockmap'
       newRepMap = M.unionWith S.union torepmap repmap'
