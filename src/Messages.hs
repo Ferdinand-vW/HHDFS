@@ -8,13 +8,17 @@ import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Lazy as B
 
+type DataNodeId = Int
 type BlockId = Int
-type Position = (ProcessId, BlockId)
+type Position = (DataNodeId, BlockId)
+
 type FileData = B.ByteString
 
 data HandShake = HandShake
-  { dataNodeId :: ProcessId
+  { dataNodePid :: ProcessId
+  , dataNodeUid :: Int
   }
+  | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)
 
 data ClientReq = ListFiles (SendPort [FilePath])
@@ -23,10 +27,11 @@ data ClientReq = ListFiles (SendPort [FilePath])
                | Shutdown
   deriving (Typeable, Generic)
 
-type ClientRes = Either ClientError Position
+type ClientRes = Either ClientError (ProcessId, BlockId)
 
 data ClientError = InvalidPathError
                  | FileNotFound
+                 | InconsistentNetwork
   deriving (Typeable, Generic, Show)
 
 data CDNReq = CDNRead BlockId (SendPort FileData)

@@ -8,35 +8,58 @@ import            Control.Concurrent
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (forM, forever)
+import            Control.Monad (forM, forever, unless)
 import            Text.Printf
 import            Data.Char (ord)
+import            Data.Maybe
+import            Data.Binary
+import            System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
+
 
 import            DataNode
-import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq, ClientRes, ClientError(..))
+import            Messages
 import            NodeInitialization
 
 type FsImage = Map FilePath Position
-type DataNodeMap = Map ProcessId (SendPort CDNReq)
+type DataNodeIdPidMap = Map DataNodeId ProcessId
 
 data NameNode = NameNode
-  { dataNodes :: [ProcessId]
+  { dataNodes :: [DataNodeId]
   , fsImage :: FsImage
+  , dnIdPidMap :: DataNodeIdPidMap
   }
 
-flushFsImage :: FsImage -> IO ()
-flushFsImage fs = writeFile "./fsImage/fsImage.fs" (show fs)
+nnConfDir, nnDataDir, fsImageFile, dnMapFile :: String
+nnConfDir = "./nn_conf/"
+nnDataDir = "./nn_data/"
+fsImageFile = nnDataDir ++ "fsImage.fs"
+dnMapFile = nnDataDir ++ "dn_map.map"
 
--- no Read instance for ProcessId, we should just use a better
--- serialization/deserialization method
--- readFsImage :: IO FsImage
--- readFsImage = do
---   s <- readFile "./fsImage/fsImage.fs"
---   let fsImg = read s :: FsImage
---   return fsImg
+flushFsImage :: FsImage -> IO ()
+flushFsImage = encodeFile fsImageFile
+
+readFsImage :: IO FsImage
+readFsImage = do
+  fileExist <- liftIO $ doesFileExist fsImageFile
+  unless fileExist $ flushFsImage M.empty
+  decodeFile fsImageFile
+
+flushDnMap :: DataNodeIdPidMap -> IO ()
+flushDnMap = encodeFile dnMapFile
+
+readDnMap :: IO DataNodeIdPidMap
+readDnMap = do
+  fileExist <- liftIO $ doesFileExist dnMapFile
+  unless fileExist $ liftIO $ flushDnMap M.empty
+  decodeFile dnMapFile
+
 
 nameNode :: Process ()
-nameNode = loop (NameNode [] M.empty)
+nameNode = do
+  liftIO $ createDirectoryIfMissing False nnDataDir
+  dnMap <- liftIO readDnMap
+  fsImg <- liftIO readFsImage
+  loop (NameNode [] fsImg dnMap)
   where
     loop nnode = receiveWait
       [ match $ \clientReq -> do
@@ -48,8 +71,17 @@ nameNode = loop (NameNode [] M.empty)
       ]
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nameNode@NameNode{..} (HandShake pid) = return $
-  nameNode { dataNodes = pid:dataNodes }
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId) = do
+  let newMap = M.insert dnId pid dnIdPidMap
+  liftIO $ flushDnMap newMap
+  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap }
+
+handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
+  sendChan chan $ nextDnId (M.keys dnIdPidMap)
+  return nameNode
+  where
+    nextDnId [] = 0
+    nextDnId a = maximum a + 1
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
 handleClients nameNode@NameNode{..} (Write fp chan) =
@@ -59,12 +91,15 @@ handleClients nameNode@NameNode{..} (Write fp chan) =
     return nameNode
   else do
     let
-      dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
+      dnodeId = toDnId dataNodes (takeFileName fp) -- pick a data node where to store the file
       positions = M.elems fsImage -- grab the list of positions
-      nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
-      newPosition = (dnodePid, nextFreeBlockId)
-    sendChan chan (Right newPosition)
-    return $ nameNode { fsImage = M.insert fp newPosition fsImage }
+      nextFreeBlockId = nextBidFor dnodeId positions -- calculate the next free block id for that data node
+      dnodePid = fromMaybe (error "This should never happen.") $ M.lookup dnodeId dnIdPidMap
+      response = (dnodePid, nextFreeBlockId)
+      newfsImage = M.insert fp (dnodeId, nextFreeBlockId) fsImage
+    sendChan chan (Right response)
+    liftIO $ flushFsImage newfsImage
+    return $ nameNode { fsImage = newfsImage }
 
 handleClients nameNode@NameNode{..} (Read  fp chan) = do
   let res = M.lookup fp fsImage
@@ -72,20 +107,28 @@ handleClients nameNode@NameNode{..} (Read  fp chan) = do
     Nothing -> do
       sendChan chan (Left FileNotFound)
       return nameNode
-    Just f -> do
-      sendChan chan (Right f)
-      return nameNode
+    Just (dnodeId, blockId) ->
+      case M.lookup dnodeId dnIdPidMap of
+        Nothing -> do
+          sendChan chan (Left InconsistentNetwork)
+          return nameNode
+        Just dnodePid -> do
+          sendChan chan (Right (dnodePid, blockId))
+          return nameNode
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
   sendChan chan (M.keys fsImage)
   return nameNode
 
 handleClients nameNode@NameNode{..} Shutdown =
-  mapM_ (`kill` "User shutdown") dataNodes >> liftIO (threadDelay 20000) >> terminate
+  mapM_ (`kill` "User shutdown") (mapMaybe toPid dataNodes) >> liftIO (threadDelay 20000) >> terminate
+    where
+      toPid dnodeId = M.lookup dnodeId dnIdPidMap
+
 
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
-nextBidFor :: ProcessId -> [Position] -> BlockId
+nextBidFor :: DataNodeId -> [Position] -> BlockId
 nextBidFor pid []        = 0
 nextBidFor pid positions = maximum (map toBid positions) + 1
   where
@@ -93,5 +136,5 @@ nextBidFor pid positions = maximum (map toBid positions) + 1
 
 -- For the time being we can pick the dataNote where to store a file with this
 -- naive technique.
-toPid :: [ProcessId] -> String -> ProcessId
-toPid pids s = pids !! (ord (head s) `mod` length pids)
+toDnId :: [DataNodeId] -> String -> DataNodeId
+toDnId pids s = pids !! (ord (head s) `mod` length pids)
