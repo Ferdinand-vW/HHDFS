@@ -49,9 +49,8 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
       dnodePids = take blockCount $
         map (toPid dataNodes (takeFileName fp)) [0..]
 
-      positions = M.elems fsImage -- grab the list of positions
-      nextFreeBlockId = nextBidFor (head dnodePids) (head positions) -- calculate the next free block id for that data node
-      newPositions = zip dnodePids [nextFreeBlockId..]
+      getBid pid = nextBidFor pid (concat $ M.elems fsImage) -- calculate the next free block id for that data node
+      newPositions = zip dnodePids (map getBid dnodePids)
 
     sendChan chan $ Right newPositions
     return $ nameNode { fsImage = M.insert fp newPositions fsImage }
