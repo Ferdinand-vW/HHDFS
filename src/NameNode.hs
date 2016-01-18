@@ -11,7 +11,7 @@ import            Data.Char (ord)
 
 import            Messages (ClientReq(..), BlockId, Position, HandShake(..), CDNReq, ClientError(..))
 
-type FsImage = Map FilePath Position
+type FsImage = Map FilePath [Position]
 type DataNodeMap = Map ProcessId (SendPort CDNReq)
 
 data NameNode = NameNode
@@ -46,12 +46,15 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
     return nameNode
   else do
     let
-      dnodePid = toPid dataNodes (takeFileName fp) -- pick a data node where to store the file
+      dnodePids = take blockCount $
+        map (toPid dataNodes (takeFileName fp)) [0..]
+
       positions = M.elems fsImage -- grab the list of positions
-      nextFreeBlockId = nextBidFor dnodePid positions -- calculate the next free block id for that data node
-      newPosition = (dnodePid, nextFreeBlockId)
-    sendChan chan undefined --(Right newPosition)
-    return $ nameNode { fsImage = M.insert fp newPosition fsImage }
+      nextFreeBlockId = nextBidFor (head dnodePids) (head positions) -- calculate the next free block id for that data node
+      newPositions = zip dnodePids [nextFreeBlockId..]
+
+    sendChan chan $ Right newPositions
+    return $ nameNode { fsImage = M.insert fp newPositions fsImage }
 
 handleClients nameNode@NameNode{..} (Read fp chan) = do
   let res = M.lookup fp fsImage
@@ -60,7 +63,7 @@ handleClients nameNode@NameNode{..} (Read fp chan) = do
       sendChan chan (Left FileNotFound)
       return nameNode
     Just f -> do
-      sendChan chan undefined --(Right f)
+      sendChan chan (Right f)
       return nameNode
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
@@ -80,5 +83,5 @@ nextBidFor pid positions = maximum (map toBid positions) + 1
 
 -- For the time being we can pick the dataNode where to store a file with this
 -- naive technique.
-toPid :: [ProcessId] -> String -> ProcessId
-toPid pids s = pids !! (ord (head s) `mod` length pids)
+toPid :: [ProcessId] -> String -> Int -> ProcessId
+toPid pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
