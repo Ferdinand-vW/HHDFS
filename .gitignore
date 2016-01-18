@@ -1,6 +1,11 @@
+## Project Specific
 data
-dist
+dn_config
+nn_data
 local
+
+## General
+dist
 cabal-dev
 *~
 *.exe
