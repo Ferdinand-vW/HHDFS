@@ -2,8 +2,8 @@
 
 module Messages where
 
-import Data.Typeable
-import GHC.Generics
+import Data.Typeable (Typeable)
+import GHC.Generics (Generic)
 import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B

@@ -10,7 +10,8 @@ import Data.Binary
 
 import Messages
 
-dnFataDir = "./data/"
+dnDataDir, dnConfDir, dnConfFile :: String
+dnDataDir = "./data/"
 dnConfDir = "./dn_config/"
 dnConfFile  = dnConfDir ++ "datanode.conf"
 
@@ -34,7 +35,7 @@ dataNode nnid = do
 
   pid <- getSelfPid
 
-  liftIO $ createDirectoryIfMissing False dnFataDir
+  liftIO $ createDirectoryIfMissing False dnDataDir
   liftIO $ createDirectoryIfMissing False dnConfDir
 
   verifyConfig nnid
@@ -43,8 +44,6 @@ dataNode nnid = do
 
   send nnid $ HandShake pid dnId
   handleMessages nnid dnId
-
-
 
 handleMessages :: ProcessId -> DataNodeId -> Process ()
 handleMessages nnid myid = do
@@ -71,4 +70,4 @@ handleMessages nnid myid = do
 
 
 getFileName :: BlockId -> FilePath
-getFileName bid = dnFataDir ++ show bid ++ ".dat"
+getFileName bid = dnDataDir ++ show bid ++ ".dat"

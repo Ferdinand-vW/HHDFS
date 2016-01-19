@@ -5,17 +5,18 @@ client
 where
 
 import Control.Distributed.Process
-import Control.Concurrent
+import Control.Concurrent (threadDelay)
 import System.FilePath (takeFileName)
 import System.Directory (createDirectoryIfMissing)
 import qualified Data.ByteString.Char8 as B
+
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
-import Messages
+import Messages (FileData)
 
 -- Example client
 client :: ProcessId -> Process ()
 client pid = do
-  input <- liftIO $ getLine --parse some input
+  input <- liftIO getLine --parse some input
   case words input of
     ["show"] -> do
       fsimage <- listFilesReq pid --get the filenames from the namenode
@@ -33,14 +34,11 @@ client pid = do
 
 --Simply prints out all the filenames prefixed with 2 spaces
 showFSImage :: [FilePath] -> Process ()
-showFSImage fsimage = do
-  mapM_ (\x -> liftIO . putStrLn $ "  " ++ x) fsimage
+showFSImage fsimage = mapM_ (\x -> liftIO . putStrLn $ "  " ++ x) fsimage
 
 writeToDisk :: FilePath -> Maybe FileData -> Process ()
-writeToDisk fpath mfdata = do
-    case mfdata of
-        Nothing -> liftIO $ putStrLn "Could not find file on network"
-        Just fdata -> do
-            let fname = takeFileName fpath
-            liftIO $ createDirectoryIfMissing False "./local"
-            liftIO $ B.writeFile ("./local/" ++ fname) fdata
+writeToDisk fpath mfdata = case mfdata of
+  Nothing -> liftIO $ putStrLn "Could not find file on network"
+  Just fdata -> liftIO $ do
+      createDirectoryIfMissing False "./local"
+      B.writeFile ("./local/" ++ takeFileName fpath) fdata
