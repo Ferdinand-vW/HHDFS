@@ -18,12 +18,13 @@ type FileData = B.ByteString
 
 -- Block size in bytes. For now, very small for testing purposes
 blockSize :: Integer
-blockSize = 32
+blockSize = 1048576 --1MB
 
 
 data HandShake = HandShake
-  { dataNodePid :: ProcessId
-  , dataNodeUid :: Int
+  { dataNodePid    :: ProcessId
+  , dataNodeUid    :: Int
+  , dataNodeBlocks :: [BlockId]
   }
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)

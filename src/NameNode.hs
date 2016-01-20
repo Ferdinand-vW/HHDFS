@@ -16,7 +16,6 @@ import            System.Directory (doesFileExist, createDirectoryIfMissing)
 
 import            Messages
 
-
 repFactor :: Int
 repFactor = 2
 
@@ -83,10 +82,14 @@ nameNode = do
       where handleMatch handler req = handler nnode req >>= loop
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nameNode@NameNode{..} (HandShake pid dnId) = do
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids) = do
   let newMap = M.insert dnId pid dnIdPidMap
+      dnIdSet = S.singleton dnId --Share this set
+      bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet, 
+                                                         --then use that to construct a Map
+      newBlockMap = M.unionWith S.union blockMap bidMap --Add all blockId's of the current DataNode to the BlockMap
   liftIO $ flushDnMap newMap
-  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap }
+  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap, blockMap = newBlockMap }
 
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   sendChan chan $ nextDnId (M.keys dnIdPidMap)
