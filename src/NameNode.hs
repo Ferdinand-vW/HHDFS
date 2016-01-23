@@ -16,7 +16,6 @@ import            Data.Maybe
 import            Data.Binary
 import            System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 
-
 import            Messages
 
 
@@ -43,32 +42,6 @@ fsImageFile = nnDataDir ++ "fsImage.fs"
 dnMapFile = nnDataDir ++ "dn_map.map"
 blockMapFile = nnDataDir ++ "block_map.map"
 
-flushFsImage :: FsImage -> IO ()
-flushFsImage = encodeFile fsImageFile
-
-readFsImage :: IO FsImage
-readFsImage = do
-  fileExist <- liftIO $ doesFileExist fsImageFile
-  unless fileExist $ flushFsImage M.empty
-  decodeFile fsImageFile
-
-flushBlockMap :: BlockMap -> IO ()
-flushBlockMap = encodeFile blockMapFile
-
-readBlockMap :: IO BlockMap
-readBlockMap = do
-  fileExist <- liftIO $ doesFileExist blockMapFile
-  unless fileExist $ flushBlockMap M.empty
-  decodeFile blockMapFile
-
-flushDnMap :: DataNodeIdPidMap -> IO ()
-flushDnMap = encodeFile dnMapFile
-
-readDnMap :: IO DataNodeIdPidMap
-readDnMap = do
-  fileExist <- liftIO $ doesFileExist dnMapFile
-  unless fileExist $ liftIO $ flushDnMap M.empty
-  decodeFile dnMapFile
 
 nameNode :: Process ()
 nameNode = do
@@ -115,15 +88,12 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
       dnodePids = mapMaybe (`M.lookup` dnIdPidMap) dataNodes
       selectedDnodes = take blockCount $ map (toPid dnodePids (takeFileName fp)) [0..]
       positions = zip selectedDnodes [(length $ M.keys blockMap)..]
-
       newfsImage = M.insert fp (map snd positions) fsImage
     sendChan chan (Right positions)
     liftIO $ flushFsImage newfsImage
 
     return $ nameNode
         { fsImage = newfsImage }
-
-
 
 handleClients nameNode@NameNode{..} (Read fp chan) = do
   let res = M.lookup fp fsImage
@@ -161,9 +131,9 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   --and therefore we add it to the BlockMap
   let (blockmap,repmap) =
         foldr (\x (bl,rep) -> if M.member x rep
-                                then (bl,M.adjust (\set -> S.insert dnodeId set) x rep)
+                                then (bl,M.adjust (S.insert dnodeId) x rep)
                                 else if M.member x bl
-                                  then (M.adjust (\set -> S.insert dnodeId set) x bl,rep)
+                                  then (M.adjust (S.insert dnodeId) x bl,rep)
                                   else (M.insert x (S.singleton dnodeId) bl,rep)) (blockMap,repMap) blocks
       --We are done with incorporating the blockreport into the maps, but we possibly have to move
       --entries from the repmap to the blockmap and vica versa.
@@ -191,6 +161,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   return $ nameNode { blockMap = newBlMap, repMap = newRepMap}
 
 
+------- UTILITY ------
 
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
@@ -204,3 +175,31 @@ nextBidFor pid positions = maximum (map toBid positions) + 1
 -- naive technique.
 toPid :: [ProcessId] -> String -> Int -> ProcessId
 toPid pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
+
+
+flushFsImage :: FsImage -> IO ()
+flushFsImage = encodeFile fsImageFile
+
+readFsImage :: IO FsImage
+readFsImage = do
+  fileExist <- liftIO $ doesFileExist fsImageFile
+  unless fileExist $ flushFsImage M.empty
+  decodeFile fsImageFile
+
+flushBlockMap :: BlockMap -> IO ()
+flushBlockMap = encodeFile blockMapFile
+
+readBlockMap :: IO BlockMap
+readBlockMap = do
+  fileExist <- liftIO $ doesFileExist blockMapFile
+  unless fileExist $ flushBlockMap M.empty
+  decodeFile blockMapFile
+
+flushDnMap :: DataNodeIdPidMap -> IO ()
+flushDnMap = encodeFile dnMapFile
+
+readDnMap :: IO DataNodeIdPidMap
+readDnMap = do
+  fileExist <- liftIO $ doesFileExist dnMapFile
+  unless fileExist $ liftIO $ flushDnMap M.empty
+  decodeFile dnMapFile
