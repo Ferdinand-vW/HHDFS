@@ -38,9 +38,7 @@ writeFileReq pid localFile remotePath = do
 
   case res of
     Right ps -> zipWithM_ writeBlock ps (chunksOf (fromIntegral blockSize) fdata) --Send the filedata to the DataNode
-    Left e -> do
-      say $ show e
-      return ()
+    Left e -> say $ show e
 
 readFileReq :: ProcessId -> FilePath -> Process (Maybe FileData)
 readFileReq pid fpath = do

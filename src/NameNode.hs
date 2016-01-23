@@ -3,21 +3,19 @@
 module NameNode where
 
 import            Control.Distributed.Process
-import            Control.Concurrent
+import            Control.Concurrent (threadDelay)
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (forM, forever, unless)
+import            Control.Monad (unless)
 import qualified  Data.Set as S
-import            Text.Printf
-
 import            Data.Char (ord)
-import            Data.Maybe
-import            Data.Binary
-import            System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
+
+import            Data.Maybe (fromJust, mapMaybe, fromMaybe)
+import            Data.Binary (encodeFile, decodeFile)
+import            System.Directory (doesFileExist, createDirectoryIfMissing)
 
 import            Messages
-
 
 repFactor :: Int
 repFactor = 2
@@ -35,7 +33,7 @@ data NameNode = NameNode
   , repMap :: BlockMap
   }
 
-nnConfDir, nnDataDir, fsImageFile, dnMapFile :: String
+nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
 nnConfDir = "./nn_conf/"
 nnDataDir = "./nn_data/"
 fsImageFile = nnDataDir ++ "fsImage.fs"
@@ -50,25 +48,23 @@ nameNode = do
   fsImg <- liftIO readFsImage
   blockMap <- liftIO readBlockMap
   loop (NameNode [] fsImg dnMap blockMap M.empty)
-
   where
     loop nnode = receiveWait
-      [ match $ \(clientReq :: ClientReq) -> do
-          newNnode <- handleClients nnode clientReq
-          loop newNnode
-      , match $ \(handShake :: HandShake) -> do
-          newNnode <- handleDataNodes nnode handShake
-          loop newNnode
-      , match $ \(blockreport :: BlockReport) -> do
-          newNnode <- handleBlockReport nnode blockreport
-          loop newNnode
+      [ match $ \(clientReq :: ClientReq) -> handleMatch handleClients clientReq
+      , match $ \(handShake :: HandShake) -> handleMatch handleDataNodes handShake
+      , match $ \(blockreport :: BlockReport) -> handleMatch handleBlockReport blockreport
       ]
+      where handleMatch handler req = handler nnode req >>= loop
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nameNode@NameNode{..} (HandShake pid dnId) = do
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids) = do
   let newMap = M.insert dnId pid dnIdPidMap
+      dnIdSet = S.singleton dnId --Share this set
+      bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet,
+                                                         --then use that to construct a Map
+      newBlockMap = M.unionWith S.union blockMap bidMap --Add all blockId's of the current DataNode to the BlockMap
   liftIO $ flushDnMap newMap
-  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap }
+  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap, blockMap = newBlockMap }
 
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   sendChan chan $ nextDnId (M.keys dnIdPidMap)
@@ -96,27 +92,24 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
         { fsImage = newfsImage }
 
 handleClients nameNode@NameNode{..} (Read fp chan) = do
-  let res = M.lookup fp fsImage
-  case res of
-    Nothing -> do
-      sendChan chan (Left FileNotFound)
-      return nameNode
-
+  case M.lookup fp fsImage of
+    Nothing -> sendChan chan (Left FileNotFound)
     Just bids -> do
       --We can either lookup twice or lookup once after a union
       --let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
       let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union blockMap repMap, bid)) bids
-
       let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdPidMap, bid)) mpids
       sendChan chan (Right res)
-      return nameNode
+  return nameNode
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
   sendChan chan (M.keys fsImage)
   return nameNode
 
-handleClients nameNode@NameNode{..} Shutdown =
-  mapM_ (`kill` "User shutdown") (mapMaybe toPid dataNodes) >> liftIO (threadDelay 20000) >> terminate
+handleClients NameNode{..} Shutdown = do
+  mapM_ (`kill` "User shutdown") (mapMaybe toPid dataNodes)
+  liftIO (threadDelay 20000)
+  terminate
     where
       toPid dnodeId = M.lookup dnodeId dnIdPidMap
 
@@ -129,12 +122,12 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   --already exists in the RepMap, then we add the ProcessId to the corresponding set. If not,
   --we try the same for the BlockMap. If it exists in neither then it has to be a new BlockId
   --and therefore we add it to the BlockMap
-  let (blockmap,repmap) =
-        foldr (\x (bl,rep) -> if M.member x rep
-                                then (bl,M.adjust (S.insert dnodeId) x rep)
-                                else if M.member x bl
-                                  then (M.adjust (S.insert dnodeId) x bl,rep)
-                                  else (M.insert x (S.singleton dnodeId) bl,rep)) (blockMap,repMap) blocks
+  let foldBlocks x (bl,rep) = case (M.member x rep, M.member x bl) of
+        (True, _)  -> (bl                                 , M.adjust (S.insert dnodeId) x rep)
+        (_, True)  -> (M.adjust (S.insert dnodeId) x bl   , rep                              )
+        (_, False) -> (M.insert x (S.singleton dnodeId) bl, rep                              )
+
+      (blockmap,repmap) = foldr foldBlocks (blockMap,repMap) blocks
       --We are done with incorporating the blockreport into the maps, but we possibly have to move
       --entries from the repmap to the blockmap and vica versa.
       --First we partition both maps on how many ProcessId's contain a BlockId
@@ -166,10 +159,11 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
 nextBidFor :: DataNodeId -> [LocalPosition] -> BlockId
-nextBidFor pid []        = 0
+nextBidFor _   []        = 0
 nextBidFor pid positions = maximum (map toBid positions) + 1
   where
-    toBid (nnodePid, blockId) = if nnodePid == pid then blockId else 0
+    toBid (nnodePid, blockId) | nnodePid == pid = blockId
+                              | otherwise       = 0
 
 -- For the time being we can pick the dataNode where to store a file with this
 -- naive technique.

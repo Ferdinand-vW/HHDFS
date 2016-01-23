@@ -2,8 +2,8 @@
 
 module Messages where
 
-import Data.Typeable
-import GHC.Generics
+import Data.Typeable (Typeable)
+import GHC.Generics (Generic)
 import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B
@@ -18,12 +18,13 @@ type FileData = B.ByteString
 
 -- Block size in bytes. For now, very small for testing purposes
 blockSize :: Integer
-blockSize = 32
+blockSize = 1048576 --1MB
 
 
 data HandShake = HandShake
-  { dataNodePid :: ProcessId
-  , dataNodeUid :: Int
+  { dataNodePid    :: ProcessId
+  , dataNodeUid    :: Int
+  , dataNodeBlocks :: [BlockId]
   }
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)

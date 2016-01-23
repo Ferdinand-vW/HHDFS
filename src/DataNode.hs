@@ -10,15 +10,23 @@ import Data.Binary
 
 import Messages
 
-dnFataDir = "./data/"
+dnDataDir, dnConfDir, dnConfFile :: String
+dnDataDir = "./data/"
 dnConfDir = "./dn_config/"
 dnConfFile  = dnConfDir ++ "datanode.conf"
+dnBlockFile = dnConfDir ++ "datanode.blocks"
 
 readDataNodeId :: IO DataNodeId
 readDataNodeId = decodeFile dnConfFile
 
 writeDataNodeId :: DataNodeId -> IO ()
 writeDataNodeId = encodeFile dnConfFile
+
+readDataNodeBlocks :: IO [BlockId]
+readDataNodeBlocks = decodeFile dnBlockFile
+
+writeDataNodeBlocks :: [BlockId] -> IO ()
+writeDataNodeBlocks = encodeFile dnBlockFile
 
 verifyConfig :: ProcessId -> Process ()
 verifyConfig nnid = do
@@ -29,26 +37,32 @@ verifyConfig nnid = do
     res <- receiveChan receivePort -- Recieve the ID from the namenode and store it locally
     liftIO $ writeDataNodeId res
 
+verifyBlocks :: Process [BlockId]
+verifyBlocks = do
+  fileExist <- liftIO $ doesFileExist dnBlockFile
+  unless fileExist $ do
+    liftIO $ writeDataNodeBlocks []
+  liftIO $ readDataNodeBlocks
+
 dataNode :: ProcessId -> Process ()
 dataNode nnid = do
 
   pid <- getSelfPid
 
-  liftIO $ createDirectoryIfMissing False dnFataDir
+  liftIO $ createDirectoryIfMissing False dnDataDir
   liftIO $ createDirectoryIfMissing False dnConfDir
 
   verifyConfig nnid
+  bids <- verifyBlocks
 
   dnId <- liftIO readDataNodeId
 
-  send nnid $ HandShake pid dnId
-  handleMessages nnid dnId
+  send nnid $ HandShake pid dnId bids
+  handleMessages nnid dnId bids
 
-
-
-handleMessages :: ProcessId -> DataNodeId -> Process ()
-handleMessages nnid myid = do
-  blocksT <- liftIO $ newTVarIO []
+handleMessages :: ProcessId -> DataNodeId -> [BlockId] -> Process ()
+handleMessages nnid myid bids = do
+  blocksT <- liftIO $ newTVarIO bids
   forever $ do
     msg <- expect :: Process CDNReq
     case msg of
@@ -62,7 +76,8 @@ handleMessages nnid myid = do
         liftIO $ B.writeFile (getFileName bid) file
         liftIO $ atomically $ modifyTVar blocksT $ \xs -> bid : xs
         blocks <- liftIO $ readTVarIO blocksT
-        send nnid (BlockReport myid blocks)
+        liftIO $ writeDataNodeBlocks blocks --Should probably do this in a single process
+        send nnid (BlockReport myid blocks) --Should also happen on a single process, but only send it every now and then
       CDNDelete bid -> liftIO $ do
         let fileName = getFileName bid
         fileExists <- doesFileExist fileName
@@ -71,4 +86,4 @@ handleMessages nnid myid = do
 
 
 getFileName :: BlockId -> FilePath
-getFileName bid = dnFataDir ++ show bid ++ ".dat"
+getFileName bid = dnDataDir ++ show bid ++ ".dat"
