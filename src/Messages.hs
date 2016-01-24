@@ -20,7 +20,6 @@ type FileData = B.ByteString
 blockSize :: Integer
 blockSize = 1048576 --1MB
 
-
 data HandShake = HandShake
   { dataNodePid    :: ProcessId
   , dataNodeUid    :: Int
@@ -29,7 +28,7 @@ data HandShake = HandShake
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)
 
-data ClientReq = ListFiles (SendPort [FilePath])
+data ClientReq = ListFiles (SendPort (ClientRes [FilePath]))
                | Read FilePath (SendPort (ClientRes [RemotePosition]))
                | Write FilePath BlockCount (SendPort (ClientRes [RemotePosition]))
                | Shutdown

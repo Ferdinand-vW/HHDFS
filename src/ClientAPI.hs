@@ -19,7 +19,13 @@ listFilesReq :: ProcessId -> Process [FilePath]
 listFilesReq pid = do
   (sendPort,receivePort) <- newChan
   send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
-  receiveChan receivePort --Wait to receive the fsimage
+  res <- receiveChan receivePort --Wait to receive the fsimage
+
+  case res of
+    Right fp -> return fp
+    Left e -> do
+      say $ show e
+      return []
 
 writeFileReq :: ProcessId -> FilePath -> FilePath -> Process ()
 writeFileReq pid localFile remotePath = do
@@ -29,6 +35,7 @@ writeFileReq pid localFile remotePath = do
   let blockCount = 1 + fromIntegral (flength `div` blockSize)
 
   (sendPort,receivePort) <- newChan
+
   send pid (Write remotePath blockCount sendPort) --Send a write request to the namenode
 
   res <- receiveChan receivePort --We receive the blockid that has been created for that file
