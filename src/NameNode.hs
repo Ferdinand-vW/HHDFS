@@ -74,7 +74,7 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
     nextDnId a = maximum a + 1
 
 handleClients :: NameNode -> ClientReq -> Process NameNode
-handleClients nameNode@NameNode{..} (Write fp blockCount chan) =
+handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
   if not $ isValid fp
   then do
     sendChan chan (Left InvalidPathError)
@@ -150,7 +150,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 
   mapM_ (\(k,a) -> send pid $ CDNRep k $
                     selectDataNodes (repFactor - S.size a + 1) dataNodes)
-                                                        (M.toList torepmap)
+                                                        (M.toList torepmap)                                                  
   return $ nameNode { blockMap = newBlMap, repMap = newRepMap}
 
 
