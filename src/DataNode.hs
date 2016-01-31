@@ -1,5 +1,6 @@
 module DataNode where
 
+import Control.Concurrent(threadDelay)
 import Control.Concurrent.STM
 import Control.Distributed.Process
 
@@ -56,13 +57,19 @@ dataNode nnid = do
   bids <- verifyBlocks
 
   dnId <- liftIO readDataNodeId
+  tvarbids <- liftIO $ newTVarIO bids
 
   send nnid $ HandShake pid dnId bids
-  handleMessages nnid dnId bids
 
-handleMessages :: ProcessId -> DataNodeId -> [BlockId] -> Process ()
-handleMessages nnid myid bids = do
-  blocksT <- liftIO $ newTVarIO bids
+  --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
+  spawnLocal $ sendBlockReports nnid dnId tvarbids
+  --Spawn a local process, which writes the blockIds that this datanode holds to file
+  --after every added or deleted blockId
+  spawnLocal $ writeBlockReports tvarbids
+  handleMessages nnid dnId tvarbids
+
+handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
+handleMessages nnid myid tvarbids = do
   forever $ do
     msg <- expect :: Process CDNReq
     case msg of
@@ -74,15 +81,40 @@ handleMessages nnid myid bids = do
         sendChan sendPort file
       CDNWrite bid file -> do
         liftIO $ B.writeFile (getFileName bid) file
-        liftIO $ atomically $ modifyTVar blocksT $ \xs -> bid : xs
-        blocks <- liftIO $ readTVarIO blocksT
-        liftIO $ writeDataNodeBlocks blocks --Should probably do this in a single process
-        send nnid (BlockReport myid blocks) --Should also happen on a single process, but only send it every now and then
+        liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
       CDNDelete bid -> liftIO $ do
         let fileName = getFileName bid
         fileExists <- doesFileExist fileName
         when fileExists $ removeFile (getFileName bid)
-        liftIO $ atomically $ modifyTVar blocksT $ \xs -> filter (/=bid) xs
+        liftIO $ atomically $ modifyTVar tvarbids $ \xs -> filter (/=bid) xs
+
+sendBlockReports :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
+sendBlockReports nnid myid tvarbids = do
+    bids <- liftIO $ readTVarIO tvarbids
+    loop bids
+  where 
+    loop oldbids = do
+      newbids <- liftIO $ readNewBlockIds tvarbids oldbids --Blocking call, waits for blockIds to be changed
+      send nnid (BlockReport myid newbids)
+      liftIO $ threadDelay 2000000 --Send a blockreport at most every 2 seconds
+      loop newbids
+
+writeBlockReports :: TVar [BlockId] -> Process ()
+writeBlockReports tvarbids = do
+    bids <- liftIO $ readTVarIO tvarbids
+    liftIO $ loop bids
+  where 
+    loop oldbids = do
+      newbids <- readNewBlockIds tvarbids oldbids
+      writeDataNodeBlocks newbids --Write the blockIds to file
+      loop newbids
+
+readNewBlockIds :: TVar [BlockId] -> [BlockId] -> IO [BlockId]
+readNewBlockIds tvarbids oldbids = atomically $ do
+    newbids <- readTVar tvarbids
+    if newbids /= oldbids
+        then return newbids
+        else retry
 
 
 getFileName :: BlockId -> FilePath

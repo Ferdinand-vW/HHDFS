@@ -198,6 +198,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
                                                         (M.toList torepmap)
   return ()
 
+
 ------- UTILITY ------
 
 
