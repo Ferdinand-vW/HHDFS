@@ -20,6 +20,8 @@ type FileData = B.ByteString
 blockSize :: Integer
 blockSize = 1048576 --1MB
 
+data ClientConnection = Response ProcessId
+  deriving (Typeable, Generic)
 
 data HandShake = HandShake
   { dataNodePid    :: ProcessId
@@ -51,6 +53,7 @@ data CDNReq = CDNRead BlockId (SendPort FileData)
 data BlockReport = BlockReport DataNodeId [BlockId]
   deriving (Typeable, Generic)
 
+instance Binary ClientConnection
 instance Binary HandShake
 instance Binary ClientError
 instance Binary ClientReq
