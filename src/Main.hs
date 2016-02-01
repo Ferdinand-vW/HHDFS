@@ -11,7 +11,7 @@ main :: IO ()
 main = do
     prog <- getArgs
     case prog of
-        ["client",host,port,phost,pport] -> setupClient (client phost) host port phost pport
+        ["client",host,port] -> setupClient client host port
         ["datanode",host,port,addr] -> setupNode dataNode host port addr
         ["namenode",host,port] -> setupNameNode nameNode host port
         _ -> putStrLn "Invalid command line arguments"

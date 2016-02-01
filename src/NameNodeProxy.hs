@@ -13,6 +13,7 @@ import Messages
 namenodeproxy :: Socket -> ProcessId -> Process ()
 namenodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
+  liftIO $ hSetBuffering h NoBuffering
   handleClient h pid
 
 handleClient :: Handle -> ProcessId -> Process ()
@@ -40,3 +41,4 @@ handleMessage (Write fp bc) h pid = do
   resp <- receiveChan receiveport
   say $ show resp
   liftIO $ B.hPutStrLn h $ toByteString $ WriteAddress resp
+  liftIO $ hFlush h

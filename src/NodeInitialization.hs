@@ -64,12 +64,10 @@ setupProxy p host port addr = do
       p pid sock-}
     
 
-setupClient :: (Handle -> IO()) -> Host -> Port -> Host -> Port -> IO ()
-setupClient p host port phost pport = do
+setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
+setupClient p host port = do
   --First we try to connect to the proxy server
-  h <- connectTo phost (PortNumber $ fromIntegral $ read pport)
-  hSetBuffering h LineBuffering
-  p h
+  p host port
     {-addrinfos <- getAddrInfo Nothing (Just phost) (Just pport)
     let proxyAddr = head addrinfos
     sock <- socket (addrFamily proxyAddr) Stream defaultProtocol

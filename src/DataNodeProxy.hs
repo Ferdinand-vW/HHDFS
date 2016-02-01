@@ -19,11 +19,14 @@ datanodeproxy socket pid = forever $ do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   say $ "wait for message"
-  msg <- liftIO $ B.hGetLine h
+  msg <- liftIO $ B.hGetContents h
   say $ "received msg"
   say $ show msg
   handleMessage (fromByteString msg) h pid
   liftIO $ hClose h
+  say $ "closed handle"
+  open <- liftIO $ hIsOpen h
+  say $ show open
 
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
@@ -32,7 +35,7 @@ handleMessage (CDNRead bid) h pid = do
   send pid (CDNReadP bid sendport)
   resp <- receiveChan receiveport
   say $ show resp
-  liftIO $ B.hPutStr h $ toByteString $ FileBlock resp
+  liftIO $ B.hPutStrLn h $ toByteString $ FileBlock resp
   say $ "send fileblock"
 
 handleMessage (CDNWrite bid fd) h pid = do
