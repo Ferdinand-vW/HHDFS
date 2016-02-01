@@ -66,7 +66,7 @@ readFileReq host h fpath = do
         putStrLn "Connected"
         B.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
-        fdata <- B.hGetLine h
+        fdata <- B.hGetContents handle
         putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
         return $ B.append bs fd 
