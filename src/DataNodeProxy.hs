@@ -13,6 +13,7 @@ datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
   liftIO $ hSetBuffering h NoBuffering
+  liftIO $ hSetBinaryMode h True
   say "received connection"
   handleClient h pid
   liftIO $ hClose h
@@ -23,7 +24,7 @@ datanodeproxy socket pid = forever $ do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   say $ "wait for message"
-  msg <- liftIO $ getData h
+  msg <- liftIO $ B.hGetContents h
   say $ "received msg"
   say $ show msg
   handleMessage (fromByteString msg) h pid
