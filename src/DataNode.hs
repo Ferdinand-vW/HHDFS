@@ -68,7 +68,7 @@ dataNode port nnid = do
   --Spawn a local process, which writes the blockIds that this datanode holds to file
   --after every added or deleted blockId
   spawnLocal $ writeBlockReports tvarbids
-  
+
   handleProxyMessages nnid dnId tvarbids
 
 handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
@@ -76,14 +76,20 @@ handleMessages nnid myid tvarbids = forever $ do
   msg <- expect :: Process IntraNetwork
   case msg of
     Repl bid pids -> do
+      say $ "received repl request to " ++ show pids
       file <- liftIO $ L.readFile (getFileName bid)
-      mapM_ (\x -> send x (CDNWriteP bid file)) pids
+      unless (null pids) $ send (head pids) (WriteFile bid file (tail pids))
+    WriteFile bid fdata pids -> do
+      say $ "received request to replcate block" ++ show bid
+      liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
+      liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
+      unless (null pids) $ send (head pids) (WriteFile bid fdata (tail pids))
+
 
 handleProxyMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
 handleProxyMessages nnid myid tvarbids = do
   forever $ do
     msg <- expect :: Process ProxyToDataNode
-    say $ ("received " ++ (show msg))
     case msg of
       CDNReadP bid sendPort -> do
         file <- liftIO $ L.readFile (getFileName bid)

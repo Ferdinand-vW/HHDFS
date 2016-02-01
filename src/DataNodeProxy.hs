@@ -44,7 +44,6 @@ handleMessage (CDNRead bid) h pid = do
   (sendport, receiveport) <- newChan
   send pid (CDNReadP bid sendport)
   resp <- receiveChan receiveport
-  say $ show resp
   liftIO $ L.hPutStrLn h $ toByteString $ FileBlock resp
   say $ "send fileblock"
 

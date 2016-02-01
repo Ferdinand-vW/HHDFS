@@ -45,7 +45,6 @@ writeFileReq host h localFile remotePath = do
         hSetBinaryMode handle True
 
         putStrLn "Was able to connect"
-        putStrLn $ show (toByteString $ CDNWrite bid fblock)
         L.hPut handle (toByteString $ CDNWrite bid fblock)
         putStrLn "Send a message"
         hClose handle
@@ -66,7 +65,6 @@ readFileReq host h fpath = do
         hSetBuffering handle NoBuffering
         hSetBinaryMode handle True
         open <- hIsOpen handle
-        putStrLn $ "handle is " ++ show open
         L.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
         fdata <- L.hGetContents handle

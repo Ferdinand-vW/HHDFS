@@ -28,6 +28,7 @@ blockSize = 1048576 --1MB
 
 data ClientConnection = Response ProcessId
   deriving (Typeable, Generic)
+
 data HandShake = HandShake
   { dataNodePid    :: ProcessId
   , dataNodeUid    :: Int
@@ -73,6 +74,7 @@ data ClientToDataNode = CDNRead BlockId
   deriving (Typeable, Generic, Show)
 
 data IntraNetwork = Repl BlockId [ProcessId]
+                  | WriteFile BlockId FileData [ProcessId]
   deriving (Typeable, Generic, Show)
 
 data BlockReport = BlockReport DataNodeId [BlockId]
