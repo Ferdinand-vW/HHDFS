@@ -26,8 +26,12 @@ type FileData = L.ByteString
 blockSize :: Integer
 blockSize = 1048576 --1MB
 
+<<<<<<< HEAD
 data ClientConnection = Response ProcessId
   deriving (Typeable, Generic)
+
+=======
+>>>>>>> STM
 data HandShake = HandShake
   { dataNodePid    :: ProcessId
   , dataNodeUid    :: Int
@@ -37,6 +41,7 @@ data HandShake = HandShake
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)
 
+<<<<<<< HEAD
 data ProxyToNameNode = ListFilesP (SendPort [FilePath])
                     | ReadP FilePath (SendPort (ClientRes [RemoteAddress]))
                     | WriteP FilePath BlockCount (SendPort (ClientRes [RemoteAddress]))
@@ -46,6 +51,12 @@ data ProxyToNameNode = ListFilesP (SendPort [FilePath])
 data ClientToNameNode = ListFiles
                       | Read FilePath
                       | Write FilePath BlockCount
+=======
+data ClientReq = ListFiles (SendPort (ClientRes [FilePath]))
+               | Read FilePath (SendPort (ClientRes [RemotePosition]))
+               | Write FilePath BlockCount (SendPort (ClientRes [RemotePosition]))
+               | Shutdown
+>>>>>>> STM
   deriving (Typeable, Generic)
 
 data ProxyToClient = FilePaths [FilePath]
@@ -62,6 +73,7 @@ data ClientError = InvalidPathError
                  | InconsistentNetwork
   deriving (Typeable, Generic, Show)
 
+<<<<<<< HEAD
 data ProxyToDataNode = CDNReadP BlockId (SendPort FileData)
             | CDNWriteP BlockId FileData
             | CDNDeleteP BlockId
@@ -73,6 +85,14 @@ data ClientToDataNode = CDNRead BlockId
   deriving (Typeable, Generic, Show)
 
 data IntraNetwork = Repl BlockId [ProcessId]
+  deriving (Typeable, Generic)
+=======
+data CDNReq = CDNRead BlockId (SendPort FileData)
+            | CDNWrite BlockId FileData
+            | CDNDelete BlockId
+            | CDNRep BlockId [ProcessId]
+  deriving (Typeable, Generic, Show)
+>>>>>>> STM
 
 data BlockReport = BlockReport DataNodeId [BlockId]
   deriving (Typeable, Generic)

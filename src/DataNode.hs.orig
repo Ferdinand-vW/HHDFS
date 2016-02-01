@@ -81,8 +81,12 @@ handleMessages nnid myid tvarbids = forever $ do
 handleProxyMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
 handleProxyMessages nnid myid tvarbids = do
   forever $ do
+<<<<<<< HEAD
     msg <- expect :: Process ProxyToDataNode
+=======
+    msg <- expect :: Process CDNReq
     say $ ("received " ++ (show msg))
+>>>>>>> STM
     case msg of
       CDNReadP bid sendPort -> do
         file <- liftIO $ L.readFile (getFileName bid)

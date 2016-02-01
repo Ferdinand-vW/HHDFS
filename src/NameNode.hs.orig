@@ -2,7 +2,12 @@
 
 module NameNode where
 
+<<<<<<< HEAD
+import Control.Concurrent.STM
+import            Control.Distributed.Process
+=======
 import            Control.Distributed.Process hiding (proxy)
+>>>>>>> STM
 import            Control.Concurrent (threadDelay)
 import            Control.Concurrent.STM
 import            GHC.Conc
@@ -30,15 +35,23 @@ type DataNodeIdPidMap = Map DataNodeId ProcessId
 
 
 data NameNode = NameNode
+<<<<<<< HEAD
+  { dataNodes :: [DataNodeId]
+  , fsImage :: FsImage
+  , dnIdPidMap :: DataNodeIdPidMap
+  , dnIdAddrMap :: DataNodeAddressMap
+  , blockMap :: BlockMap
+  , repMap :: BlockMap
+  , blockIdCounter :: TVar Int
+=======
   { dataNodes :: TVar [DataNodeId]
   , fsImage :: TVar FsImage
   , dnIdPidMap :: TVar DataNodeIdPidMap
-  , dnIdAddrMap :: DataNodeAddressMap
   , blockMap :: TVar BlockMap
   , repMap :: TVar BlockMap
   , proxyChan :: TChan (Process ())
-  , blockIdCounter :: TVar Int
   , ioChan :: TChan (Process ())
+>>>>>>> STM
   }
 
 nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
@@ -73,12 +86,22 @@ mkNameNode = do
 nameNode :: Process ()
 nameNode = do
   liftIO $ createDirectoryIfMissing False nnDataDir
-
-  nn <- liftIO $ atomically mkNameNode
-
+<<<<<<< HEAD
+  dnMap <- liftIO readDnMap
+  fsImg <- liftIO readFsImage
+  blockMap <- liftIO readBlockMap
   blockId <- liftIO readBlockId
   blockIdT <- liftIO $ newTVarIO blockId
   loop (NameNode [] fsImg dnMap M.empty blockMap M.empty blockIdT)
+  where
+    loop nnode = receiveWait
+      [ match $ \(clientReq :: ProxyToNameNode) -> handleMatch handleClients clientReq
+      , match $ \(handShake :: HandShake) -> handleMatch handleDataNodes handShake
+      , match $ \(blockreport :: BlockReport) -> handleMatch handleBlockReport blockreport
+=======
+
+  nn <- liftIO $ atomically mkNameNode
+
   spawnLocal (proxy nn) -- spawn local proxy to execute process actions
   ioThread <- spawnLocal (proxyIO nn) -- spawn io proxy to flush data to disk
 
@@ -92,11 +115,24 @@ nameNode = do
           liftIO $ atomically $ handleDataNodes nn handShake
       , match $ \(blockreport :: BlockReport) ->
           liftIO $ atomically $ handleBlockReport nn blockreport
+>>>>>>> STM
       ]
 
+<<<<<<< HEAD
+handleDataNodes :: NameNode -> HandShake -> Process NameNode
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
+  let newMap = M.insert dnId pid dnIdPidMap
+      dnIdSet = S.singleton dnId --Share this set
+      bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet,
+                                                         --then use that to construct a Map
+      newBlockMap = M.unionWith S.union blockMap bidMap --Add all blockId's of the current DataNode to the BlockMap
+      dnAddressMap = M.insert dnId address dnIdAddrMap
+  liftIO $ flushDnMap newMap
+  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap, dnIdAddrMap = dnAddressMap, blockMap = newBlockMap }
+=======
 
 handleDataNodes :: NameNode -> HandShake -> STM ()
-handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids) = do
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
   dNodes <- readTVar dataNodes
@@ -105,11 +141,12 @@ handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
       bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet,
                                                          --then use that to construct a Map
       newBlockMap = M.unionWith S.union bMap bidMap --Add all blockId's of the current DataNode to the BlockMap
-      dnAddressMap = M.insert dnId address dnIdAddrMap
+
   writeIOChan nameNode $ liftIO $ flushDnMap newMap
   writeTVar dnIdPidMap newMap
   writeTVar blockMap newBlockMap
   modifyTVar' dataNodes (dnId:)
+>>>>>>> STM
 
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   idPidMap <- readTVar dnIdPidMap
@@ -118,31 +155,66 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
     nextDnId [] = 0
     nextDnId a = maximum a + 1
 
-handleClients :: NameNode -> ClientReq -> STM ()
+<<<<<<< HEAD
+handleClients :: NameNode -> ProxyToNameNode -> Process NameNode
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
+  say "Received write"
+=======
+handleClients :: NameNode -> ClientReq -> STM ()
+handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
   writeIOChan nameNode $ say "received Write req from client"
   dNodes <- readTVar dataNodes
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
+>>>>>>> STM
   if not $ isValid fp
   then sendChanSTM nameNode chan (Left InvalidPathError)
   else do
+<<<<<<< HEAD
     blockId <- liftIO $ readTVarIO blockIdCounter
-    let dnodePids = mapMaybe (`M.lookup` idPidMap) dNodes
+    let
       dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrMap) dataNodes
       selectedDnodes = take blockCount $ map (pick dnodeAddrs (takeFileName fp)) [0..]
       positions = zip selectedDnodes [(blockId + 1)..]
-        updateFsImg = M.insert fp (map snd positions)
+      newfsImage = M.insert fp (map snd positions) fsImage
       maxBlockId = blockId + length selectedDnodes
-    writeIOChan nameNode $ say $ "response for client " ++ (show positions)
+    sendChan chan (Right positions)
     liftIO $ atomically $ writeTVar blockIdCounter maxBlockId
     liftIO $ flushBlockId maxBlockId
+    liftIO $ flushFsImage newfsImage
+=======
+    let dnodePids = mapMaybe (`M.lookup` idPidMap) dNodes
+        selectedDnodes = take blockCount $ map (toPid dnodePids (takeFileName fp)) [0..]
+        positions = zip selectedDnodes [(length $ M.keys bMap)..]
+        updateFsImg = M.insert fp (map snd positions)
+
+    writeIOChan nameNode $ say $ "response for client " ++ (show positions)
     writeIOChan nameNode $ liftIO $ flushFsImage nameNode
     modifyTVar' fsImage updateFsImg
     sendChanSTM nameNode chan (Right positions)
+>>>>>>> STM
 
 
+<<<<<<< HEAD
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
+  say $ "Received read"
+  case M.lookup fp fsImage of
+    Nothing -> sendChan chan (Left FileNotFound)
+    Just bids -> do
+      --We can either lookup twice or lookup once after a union
+      --let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
+      let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union blockMap repMap, bid)) bids
+      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrMap, bid)) mpids
+      say $ "send addresses back"
+      sendChan chan (Right res)
+  return nameNode
+
+handleClients nameNode@NameNode{..} (ListFilesP chan) = do
+  say "received show"
+  sendChan chan (M.keys fsImage)
+  return nameNode
+=======
+handleClients nameNode@NameNode{..} (Read fp chan) = do
   writeIOChan nameNode $ say "received Read req from client"
   fsImg <- readTVar fsImage
   case M.lookup fp fsImg of
@@ -160,10 +232,11 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
 
-handleClients nameNode@NameNode{..} (ListFilesP chan) = do
+handleClients nameNode@NameNode{..} (ListFiles chan) = do
   writeIOChan nameNode $ say "received Show req from client"
   fsImg <- readTVar fsImage
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
+>>>>>>> STM
 
 handleClients nameNode@NameNode{..} Shutdown = do
   dNodes <- readTVar dataNodes
@@ -213,12 +286,19 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 
   writeIOChan nameNode $ say $ "new repmap " ++ (show newRepMap)
 
+<<<<<<< HEAD
+  mapM_ (\(k,a) -> send pid $ Repl k $
+                    selectDataNodes (repFactor - S.size a + 1) dataNodes)
+                                                        (M.toList torepmap)                                                  
+  return $ nameNode { blockMap = newBlMap, repMap = newRepMap}
+=======
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
-  mapM_ (\(k,a) -> sendSTM nameNode pid $ Repl k $
+  mapM_ (\(k,a) -> sendSTM nameNode pid $ CDNRep k $
                     selectDataNodes (repFactor - S.size a + 1) dNodes)
                                                         (M.toList torepmap)
   return ()
+>>>>>>> STM
 
 
 ------- UTILITY ------

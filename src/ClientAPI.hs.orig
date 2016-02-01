@@ -92,7 +92,11 @@ shutdownReq h = undefined--B.hPutStrLn h (toByteString Shutdown)  -- Send a shut
 {-listFilesReq :: ProcessId -> Process [FilePath]
 listFilesReq pid = do
   (sendPort,receivePort) <- newChan
+<<<<<<< HEAD
   --send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
+  receiveChan receivePort --Wait to receive the fsimage
+=======
+  send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
   res <- receiveChan receivePort --Wait to receive the fsimage
 
   case res of
@@ -100,6 +104,7 @@ listFilesReq pid = do
     Left e -> do
       say $ show e
       return []
+>>>>>>> STM
 
 writeFileReq :: ProcessId -> FilePath -> FilePath -> Process ()
 writeFileReq pid localFile remotePath = do
