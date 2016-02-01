@@ -9,9 +9,14 @@ import           Control.Monad (forever)
 
 import           Messages
 
-proxy :: ProcessId -> Socket -> IO ()
+{-proxy :: ProcessId -> Socket -> IO ()
 proxy pid sock = 
-  forever $ do
-    (conn,_) <- accept sock
-    sendAll conn (L.toStrict $ encode $ Response pid)
-    close conn
+  loop 2
+ where 
+    loop 0 = close sock
+    loop n = do
+        (conn,_) <- accept sock
+        putStrLn "Received Connection"
+        sendAll conn (L.toStrict $ encode $ Response pid)
+        close conn
+        loop (n - 1)-}

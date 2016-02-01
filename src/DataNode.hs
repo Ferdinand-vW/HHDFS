@@ -45,8 +45,8 @@ verifyBlocks = do
     liftIO $ writeDataNodeBlocks []
   liftIO $ readDataNodeBlocks
 
-dataNode :: ProcessId -> Process ()
-dataNode nnid = do
+dataNode :: Port -> ProcessId -> Process ()
+dataNode port nnid = do
 
   pid <- getSelfPid
 
@@ -58,31 +58,39 @@ dataNode nnid = do
 
   dnId <- liftIO readDataNodeId
   tvarbids <- liftIO $ newTVarIO bids
-
-  send nnid $ HandShake pid dnId bids
+  let port' = show $ 1 + read port
+  send nnid $ HandShake pid dnId bids port'
 
   --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
   spawnLocal $ sendBlockReports nnid dnId tvarbids
   --Spawn a local process, which writes the blockIds that this datanode holds to file
   --after every added or deleted blockId
   spawnLocal $ writeBlockReports tvarbids
-  handleMessages nnid dnId tvarbids
+  spawnLocal $ handleMessages nnid dnId tvarbids
+  handleProxyMessages nnid dnId tvarbids
 
 handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
-handleMessages nnid myid tvarbids = do
+handleMessages nnid myid tvarbids = forever $ do
+  msg <- expect :: Process IntraNetwork
+  case msg of
+    Repl bid pids -> do
+      file <- liftIO $ B.readFile (getFileName bid)
+      mapM_ (\x -> send x (CDNWriteP bid file)) pids
+    _ -> error "Received unknown message"
+
+handleProxyMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
+handleProxyMessages nnid myid tvarbids = do
   forever $ do
-    msg <- expect :: Process CDNReq
+    msg <- expect :: Process ProxyToDataNode
     case msg of
-      CDNRep bid pids -> do
-        file <- liftIO $ B.readFile (getFileName bid)
-        mapM_ (\x -> send x (CDNWrite bid file)) pids
-      CDNRead bid sendPort -> do
+      CDNReadP bid sendPort -> do
         file <- liftIO $ B.readFile (getFileName bid)
         sendChan sendPort file
-      CDNWrite bid file -> do
+      CDNWriteP bid file -> do
+        say "received write from proxy"
         liftIO $ B.writeFile (getFileName bid) file
         liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
-      CDNDelete bid -> liftIO $ do
+      CDNDeleteP bid -> liftIO $ do
         let fileName = getFileName bid
         fileExists <- doesFileExist fileName
         when fileExists $ removeFile (getFileName bid)

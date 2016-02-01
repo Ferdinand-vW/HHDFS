@@ -22,6 +22,7 @@ repFactor = 2
 
 type FsImage = Map FilePath [BlockId]
 type BlockMap = Map BlockId (S.Set DataNodeId)
+type DataNodeAddressMap = Map DataNodeId Port
 type DataNodeIdPidMap = Map DataNodeId ProcessId
 
 
@@ -29,6 +30,7 @@ data NameNode = NameNode
   { dataNodes :: [DataNodeId]
   , fsImage :: FsImage
   , dnIdPidMap :: DataNodeIdPidMap
+  , dnIdAddrMap :: DataNodeAddressMap
   , blockMap :: BlockMap
   , repMap :: BlockMap
   }
@@ -47,24 +49,25 @@ nameNode = do
   dnMap <- liftIO readDnMap
   fsImg <- liftIO readFsImage
   blockMap <- liftIO readBlockMap
-  loop (NameNode [] fsImg dnMap blockMap M.empty)
+  loop (NameNode [] fsImg dnMap M.empty blockMap M.empty)
   where
     loop nnode = receiveWait
-      [ match $ \(clientReq :: ClientReq) -> handleMatch handleClients clientReq
+      [ match $ \(clientReq :: ProxyToNameNode) -> handleMatch handleClients clientReq
       , match $ \(handShake :: HandShake) -> handleMatch handleDataNodes handShake
       , match $ \(blockreport :: BlockReport) -> handleMatch handleBlockReport blockreport
       ]
       where handleMatch handler req = handler nnode req >>= loop
 
 handleDataNodes :: NameNode -> HandShake -> Process NameNode
-handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids) = do
+handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
   let newMap = M.insert dnId pid dnIdPidMap
       dnIdSet = S.singleton dnId --Share this set
       bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet,
                                                          --then use that to construct a Map
       newBlockMap = M.unionWith S.union blockMap bidMap --Add all blockId's of the current DataNode to the BlockMap
+      dnAddressMap = M.insert dnId address dnIdAddrMap
   liftIO $ flushDnMap newMap
-  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap, blockMap = newBlockMap }
+  return $ nameNode { dataNodes = dnId:dataNodes, dnIdPidMap = newMap, dnIdAddrMap = dnAddressMap, blockMap = newBlockMap }
 
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   sendChan chan $ nextDnId (M.keys dnIdPidMap)
@@ -73,16 +76,17 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
     nextDnId [] = 0
     nextDnId a = maximum a + 1
 
-handleClients :: NameNode -> ClientReq -> Process NameNode
-handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
+handleClients :: NameNode -> ProxyToNameNode -> Process NameNode
+handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
+  say "Received write"
   if not $ isValid fp
   then do
     sendChan chan (Left InvalidPathError)
     return nameNode
   else do
     let
-      dnodePids = mapMaybe (`M.lookup` dnIdPidMap) dataNodes
-      selectedDnodes = take blockCount $ map (toPid dnodePids (takeFileName fp)) [0..]
+      dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrMap) dataNodes
+      selectedDnodes = take blockCount $ map (pick dnodeAddrs (takeFileName fp)) [0..]
       positions = zip selectedDnodes [(length $ M.keys blockMap)..]
       newfsImage = M.insert fp (map snd positions) fsImage
     sendChan chan (Right positions)
@@ -91,18 +95,19 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
     return $ nameNode
         { fsImage = newfsImage }
 
-handleClients nameNode@NameNode{..} (Read fp chan) = do
+handleClients nameNode@NameNode{..} (ReadP fp chan) = do
   case M.lookup fp fsImage of
     Nothing -> sendChan chan (Left FileNotFound)
     Just bids -> do
       --We can either lookup twice or lookup once after a union
       --let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
       let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union blockMap repMap, bid)) bids
-      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdPidMap, bid)) mpids
+      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrMap, bid)) mpids
       sendChan chan (Right res)
   return nameNode
 
-handleClients nameNode@NameNode{..} (ListFiles chan) = do
+handleClients nameNode@NameNode{..} (ListFilesP chan) = do
+  say "received show"
   sendChan chan (M.keys fsImage)
   return nameNode
 
@@ -148,7 +153,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
         where
           dataNodesPids = mapMaybe (`M.lookup` dnIdPidMap) dataNodes
 
-  mapM_ (\(k,a) -> send pid $ CDNRep k $
+  mapM_ (\(k,a) -> send pid $ Repl k $
                     selectDataNodes (repFactor - S.size a + 1) dataNodes)
                                                         (M.toList torepmap)                                                  
   return $ nameNode { blockMap = newBlMap, repMap = newRepMap}
@@ -167,8 +172,8 @@ nextBidFor pid positions = maximum (map toBid positions) + 1
 
 -- For the time being we can pick the dataNode where to store a file with this
 -- naive technique.
-toPid :: [ProcessId] -> String -> Int -> ProcessId
-toPid pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
+pick :: [a] -> String -> Int -> a
+pick pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
 
 
 flushFsImage :: FsImage -> IO ()

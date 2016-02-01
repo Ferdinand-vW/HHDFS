@@ -12,13 +12,73 @@ import Data.Functor ((<$>))
 import Control.Monad (foldM, zipWithM_)
 import qualified Data.ByteString.Char8 as B
 import qualified System.IO as IO
+import Network
+import System.IO
 
 import Messages
 
-listFilesReq :: ProcessId -> Process [FilePath]
+listFilesReq :: Handle -> IO [FilePath]
+listFilesReq h = do
+  let lf = toByteString ListFiles
+  B.hPutStrLn h lf
+
+  msg <- B.hGetLine h
+  let FilePaths xs = fromByteString msg
+  return xs
+
+writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
+writeFileReq host h localFile remotePath = do
+  fdata <- B.readFile localFile
+
+  flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
+  let blockCount = 1 + fromIntegral (flength `div` blockSize)
+  B.hPutStrLn h $ toByteString $ Write remotePath blockCount
+
+  resp <- B.hGetLine h
+  let WriteAddress res = fromByteString resp
+      writeBlock (port,bid) fblock = do
+        putStrLn "Write a block"
+        handle <- connectTo host (PortNumber $ fromIntegral $ read port)
+        putStrLn "Was able to connect"
+        B.hPutStrLn handle (toByteString $ CDNWrite bid fblock)
+        putStrLn "Send a message"
+        hClose handle
+  putStrLn $ "Received write address: " ++ show res
+  case res of
+    Left e -> putStrLn $ show e
+    Right addrs -> zipWithM_ writeBlock addrs (chunksOf (fromIntegral blockSize) fdata)
+
+readFileReq :: Host -> Handle -> FilePath -> IO (Maybe FileData)
+readFileReq host h fpath = do
+  let rf = toByteString $ Read fpath
+  B.hPutStrLn h rf
+
+  resp <- B.hGetLine h
+  let ReadAddress mexists = fromByteString resp
+      readBlock bs (port,bid) = do
+        handle <- connectTo host (PortNumber $ fromIntegral $ read port)
+        B.hPutStrLn handle (toByteString $ CDNRead bid)
+        fdata <- B.hGetLine h
+        let FileBlock fd = fromByteString fdata
+        return $ B.append bs fd 
+
+  case mexists of
+    Left e -> putStrLn (show e) >> return Nothing
+    Right addrs -> Just <$> foldM readBlock B.empty addrs
+
+chunksOf :: Int -> B.ByteString -> [B.ByteString]
+chunksOf n s = case B.splitAt (fromIntegral n) s of
+  (a,b) | B.null a  -> []
+        | otherwise -> a : chunksOf n b
+
+shutdownReq :: Handle -> IO ()
+shutdownReq h = B.hPutStrLn h (toByteString Shutdown)  -- Send a shutdown request to the name node
+                                      -- This will close every node in the network
+
+{-listFilesReq :: ProcessId -> Process [FilePath]
 listFilesReq pid = do
   (sendPort,receivePort) <- newChan
-  send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
+  --send pid (ListFiles sendPort) --Ask the Namenode for the fsimage
   receiveChan receivePort --Wait to receive the fsimage
 
 writeFileReq :: ProcessId -> FilePath -> FilePath -> Process ()
@@ -59,13 +119,4 @@ readFileReq pid fpath = do
       say $ show e
       return Nothing
     Right ps -> Just <$> foldM readBlock B.empty ps
-
-shutdownReq :: ProcessId -> Process ()
-shutdownReq pid = send pid Shutdown  -- Send a shutdown request to the name node
-                                      -- This will close every node in the network
-
-
-chunksOf :: Int -> B.ByteString -> [B.ByteString]
-chunksOf n s = case B.splitAt (fromIntegral n) s of
-  (a,b) | B.null a  -> []
-        | otherwise -> a : chunksOf n b
+-}
