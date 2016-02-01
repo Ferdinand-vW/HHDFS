@@ -2,6 +2,7 @@
 
 module NameNode where
 
+import Control.Concurrent.STM
 import            Control.Distributed.Process
 import            Control.Concurrent (threadDelay)
 import            System.FilePath (takeFileName, isValid)
@@ -33,6 +34,7 @@ data NameNode = NameNode
   , dnIdAddrMap :: DataNodeAddressMap
   , blockMap :: BlockMap
   , repMap :: BlockMap
+  , blockIdCounter :: TVar Int
   }
 
 nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
@@ -41,6 +43,7 @@ nnDataDir = "./nn_data/"
 fsImageFile = nnDataDir ++ "fsImage.fs"
 dnMapFile = nnDataDir ++ "dn_map.map"
 blockMapFile = nnDataDir ++ "block_map.map"
+blockIdFile = nnDataDir ++ "blockId.id"
 
 
 nameNode :: Process ()
@@ -49,7 +52,9 @@ nameNode = do
   dnMap <- liftIO readDnMap
   fsImg <- liftIO readFsImage
   blockMap <- liftIO readBlockMap
-  loop (NameNode [] fsImg dnMap M.empty blockMap M.empty)
+  blockId <- liftIO readBlockId
+  blockIdT <- liftIO $ newTVarIO blockId
+  loop (NameNode [] fsImg dnMap M.empty blockMap M.empty blockIdT)
   where
     loop nnode = receiveWait
       [ match $ \(clientReq :: ProxyToNameNode) -> handleMatch handleClients clientReq
@@ -84,12 +89,16 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
     sendChan chan (Left InvalidPathError)
     return nameNode
   else do
+    blockId <- liftIO $ readTVarIO blockIdCounter
     let
       dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrMap) dataNodes
       selectedDnodes = take blockCount $ map (pick dnodeAddrs (takeFileName fp)) [0..]
-      positions = zip selectedDnodes [(length $ M.keys blockMap)..]
+      positions = zip selectedDnodes [(blockId + 1)..]
       newfsImage = M.insert fp (map snd positions) fsImage
+      maxBlockId = blockId + length selectedDnodes
     sendChan chan (Right positions)
+    liftIO $ atomically $ writeTVar blockIdCounter maxBlockId
+    liftIO $ flushBlockId maxBlockId
     liftIO $ flushFsImage newfsImage
 
     return $ nameNode
@@ -204,3 +213,12 @@ readDnMap = do
   fileExist <- liftIO $ doesFileExist dnMapFile
   unless fileExist $ liftIO $ flushDnMap M.empty
   decodeFile dnMapFile
+
+flushBlockId :: Int -> IO ()
+flushBlockId = encodeFile blockIdFile
+
+readBlockId :: IO Int
+readBlockId = do
+  fileExist <- liftIO $ doesFileExist blockIdFile
+  unless fileExist $ liftIO $ flushBlockId 0
+  decodeFile blockIdFile 
