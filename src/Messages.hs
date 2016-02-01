@@ -8,7 +8,7 @@ import Data.Binary (Binary)
 import Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Binary(encode,decode)
+import Data.Binary(decode,encode)
 
 type DataNodeId = Int
 type BlockId = Int
@@ -19,7 +19,7 @@ type RemotePosition = (ProcessId, BlockId)
 type RemoteAddress = (Port,BlockId)
 
 type BlockCount = Int
-type FileData = B.ByteString
+type FileData = L.ByteString
 
 
 -- Block size in bytes. For now, very small for testing purposes
@@ -53,7 +53,7 @@ data ProxyToClient = FilePaths [FilePath]
                    | ReadAddress (ClientRes [RemoteAddress])
                    | WriteAddress (ClientRes [RemoteAddress])
                    | FileBlock FileData
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic,Show)
 
 
 type ClientRes a = Either ClientError a
@@ -91,8 +91,13 @@ instance Binary HandShake
 instance Binary ClientError
 instance Binary BlockReport
 
-toByteString :: Binary a => a -> B.ByteString
-toByteString = L.toStrict . encode
+{-instance Serialize ProxyToClient
+instance Serialize ClientToNameNode
+instance Serialize ClientToDataNode
+instance Serialize ClientError-}
 
-fromByteString :: Binary a => B.ByteString -> a
-fromByteString = decode . L.fromStrict
+toByteString :: Binary a => a -> L.ByteString
+toByteString = encode
+
+fromByteString :: Binary a => L.ByteString -> a
+fromByteString = decode

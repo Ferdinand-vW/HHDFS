@@ -53,4 +53,4 @@ writeToDisk fpath mfdata = case mfdata of
   Nothing -> putStrLn "Could not find file on network"
   Just fdata -> do
       createDirectoryIfMissing False "./local"
-      B.writeFile ("./local/" ++ takeFileName fpath) fdata
+      L.writeFile ("./local/" ++ takeFileName fpath) fdata

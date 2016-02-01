@@ -5,6 +5,7 @@ import Control.Concurrent.STM
 import Control.Distributed.Process
 
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as L
 import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
 import Control.Monad (when, forever, unless)
 import Data.Binary
@@ -74,7 +75,7 @@ handleMessages nnid myid tvarbids = forever $ do
   msg <- expect :: Process IntraNetwork
   case msg of
     Repl bid pids -> do
-      file <- liftIO $ B.readFile (getFileName bid)
+      file <- liftIO $ L.readFile (getFileName bid)
       mapM_ (\x -> send x (CDNWriteP bid file)) pids
 
 handleProxyMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
@@ -83,11 +84,11 @@ handleProxyMessages nnid myid tvarbids = do
     msg <- expect :: Process ProxyToDataNode
     case msg of
       CDNReadP bid sendPort -> do
-        file <- liftIO $ B.readFile (getFileName bid)
+        file <- liftIO $ L.readFile (getFileName bid)
         sendChan sendPort file
       CDNWriteP bid file -> do
         say "received write from proxy"
-        liftIO $ B.writeFile (getFileName bid) file
+        liftIO $ B.writeFile (getFileName bid) (L.toStrict file)
         liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
       CDNDeleteP bid -> liftIO $ do
         let fileName = getFileName bid

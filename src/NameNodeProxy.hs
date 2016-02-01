@@ -19,27 +19,26 @@ namenodeproxy socket pid = forever $ do
 
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
-  msg <- liftIO $ B.hGetLine h
-  handleMessage (decode $ L.fromStrict msg) h pid
+  msg <- liftIO $ L.hGetContents h
+  handleMessage (decode msg) h pid
 
 handleMessage :: ClientToNameNode -> Handle -> ProcessId -> Process ()
 handleMessage ListFiles h pid  = do
   (sendport,receiveport) <- newChan
   send pid (ListFilesP sendport)
   resp <- receiveChan receiveport
-  liftIO $ B.hPutStrLn h $ L.toStrict $ encode  $ FilePaths resp
+  liftIO $ L.hPutStrLn h $ encode  $ FilePaths resp
 
 handleMessage (Read fp) h pid = do
   (sendport,receiveport) <- newChan
   send pid (ReadP fp sendport)
   resp <- receiveChan receiveport
   say $ show resp
-  liftIO $ B.hPutStrLn h $ L.toStrict $ encode $ ReadAddress resp
+  liftIO $ L.hPutStrLn h $ encode $ ReadAddress resp
 
 handleMessage (Write fp bc) h pid = do
   (sendport,receiveport) <- newChan
   send pid (WriteP fp bc sendport)
   resp <- receiveChan receiveport
   say $ show resp
-  liftIO $ B.hPutStrLn h $ toByteString $ WriteAddress resp
-  liftIO $ hFlush h
+  liftIO $ L.hPutStrLn h $ toByteString $ WriteAddress resp

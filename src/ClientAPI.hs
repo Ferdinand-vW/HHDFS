@@ -11,7 +11,9 @@ import Control.Distributed.Process
 import Data.Functor ((<$>))
 import Control.Monad (foldM, zipWithM_)
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as L
 import qualified System.IO as IO
+import Data.Binary(decode)
 import Network
 import System.IO
 
@@ -23,20 +25,20 @@ listFilesReq h = do
   open <- hIsOpen h
   if open
     then do
-      B.hPutStrLn h lf
-      msg <- B.hGetLine h
+      L.hPutStrLn h lf
+      msg <- L.hGetContents h
       let FilePaths xs = fromByteString msg
       return xs
     else error "handle is closed"
 
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
 writeFileReq host h localFile remotePath = do
-  fdata <- B.readFile localFile
+  fdata <- L.readFile localFile
 
   flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
   let blockCount = 1 + fromIntegral (flength `div` blockSize)
-  B.hPutStrLn h $ toByteString $ Write remotePath blockCount
-  resp <- B.hGetLine h
+  L.hPutStrLn h $ toByteString $ Write remotePath blockCount
+  resp <- L.hGetContents h
   let WriteAddress res = fromByteString resp
       writeBlock (port,bid) fblock = do
         putStrLn "Write a block"
@@ -46,7 +48,7 @@ writeFileReq host h localFile remotePath = do
 
         putStrLn "Was able to connect"
         putStrLn $ show (toByteString $ CDNWrite bid fblock)
-        B.hPutStrLn handle (toByteString $ CDNWrite bid fblock)
+        L.hPut handle (toByteString $ CDNWrite bid fblock)
         putStrLn "Send a message"
         hClose handle
   putStrLn $ "Received write address: " ++ show res
@@ -57,9 +59,9 @@ writeFileReq host h localFile remotePath = do
 readFileReq :: Host -> Handle -> FilePath -> IO (Maybe FileData)
 readFileReq host h fpath = do
   let rf = toByteString $ Read fpath
-  B.hPutStrLn h rf
+  L.hPutStrLn h rf
 
-  resp <- B.hGetLine h
+  resp <- L.hGetContents h
   let ReadAddress mexists = fromByteString resp
       readBlock bs (port,bid) = do
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
@@ -67,24 +69,24 @@ readFileReq host h fpath = do
         hSetBinaryMode handle True
         open <- hIsOpen handle
         putStrLn $ "handle is " ++ show open
-        B.hPutStrLn handle (toByteString $ CDNRead bid)
+        L.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
-        fdata <- B.hGetContents handle
+        fdata <- L.hGetContents handle
         putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
-        return $ B.append bs fd
+        return $ L.append bs fd
   putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
-    Right addrs -> Just <$> foldM readBlock B.empty addrs
+    Right addrs -> Just <$> foldM readBlock L.empty addrs
 
-chunksOf :: Int -> B.ByteString -> [B.ByteString]
-chunksOf n s = case B.splitAt (fromIntegral n) s of
-  (a,b) | B.null a  -> []
+chunksOf :: Int -> L.ByteString -> [L.ByteString]
+chunksOf n s = case L.splitAt (fromIntegral n) s of
+  (a,b) | L.null a  -> []
         | otherwise -> a : chunksOf n b
 
 shutdownReq :: Handle -> IO ()
-shutdownReq h = B.hPutStrLn h (toByteString Shutdown)  -- Send a shutdown request to the name node
+shutdownReq h = undefined--B.hPutStrLn h (toByteString Shutdown)  -- Send a shutdown request to the name node
                                       -- This will close every node in the network
 
 {-listFilesReq :: ProcessId -> Process [FilePath]
