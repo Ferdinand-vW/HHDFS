@@ -60,14 +60,15 @@ dataNode port nnid = do
   dnId <- liftIO readDataNodeId
   tvarbids <- liftIO $ newTVarIO bids
   let port' = show $ 1 + read port
-  send nnid $ HandShake pid dnId bids port'
+  pid' <- spawnLocal $ handleMessages nnid dnId tvarbids
+  send nnid $ HandShake pid' dnId bids port'
 
   --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
   spawnLocal $ sendBlockReports nnid dnId tvarbids
   --Spawn a local process, which writes the blockIds that this datanode holds to file
   --after every added or deleted blockId
   spawnLocal $ writeBlockReports tvarbids
-  spawnLocal $ handleMessages nnid dnId tvarbids
+  
   handleProxyMessages nnid dnId tvarbids
 
 handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
