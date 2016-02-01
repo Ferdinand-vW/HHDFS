@@ -113,6 +113,7 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
 
 handleClients :: NameNode -> ClientReq -> STM ()
 handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
+  writeIOChan nameNode $ say "received Write req from client"
   dNodes <- readTVar dataNodes
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
@@ -124,11 +125,14 @@ handleClients nameNode@NameNode{..} (Write fp blockCount chan) = do
         positions = zip selectedDnodes [(length $ M.keys bMap)..]
         updateFsImg = M.insert fp (map snd positions)
 
-    sendChanSTM nameNode chan (Right positions)
+    writeIOChan nameNode $ say $ "response for client " ++ (show positions)
     writeIOChan nameNode $ liftIO $ flushFsImage nameNode
     modifyTVar' fsImage updateFsImg
+    sendChanSTM nameNode chan (Right positions)
+
 
 handleClients nameNode@NameNode{..} (Read fp chan) = do
+  writeIOChan nameNode $ say "received Read req from client"
   fsImg <- readTVar fsImage
   case M.lookup fp fsImg of
     Nothing -> sendChanSTM nameNode chan (Left FileNotFound)
@@ -142,9 +146,11 @@ handleClients nameNode@NameNode{..} (Read fp chan) = do
       -- We could insert some retries here instead of the fromJust
       let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union bMap rMap, bid)) bids
       let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId idPidMap, bid)) mpids
+      writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
 
 handleClients nameNode@NameNode{..} (ListFiles chan) = do
+  writeIOChan nameNode $ say "received Show req from client"
   fsImg <- readTVar fsImage
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
 
@@ -159,6 +165,7 @@ handleClients nameNode@NameNode{..} Shutdown = do
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> STM ()
 handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
+  writeIOChan nameNode $ say $ "received blockrep from " ++ (show dnodeId)
   bMap <- readTVar blockMap
   rMap <- readTVar repMap
   idPidMap <- readTVar dnIdPidMap
@@ -193,6 +200,10 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
         where
           dataNodesPids = mapMaybe (`M.lookup` idPidMap) dataNodes
 
+  writeIOChan nameNode $ say $ "new repmap " ++ (show newRepMap)
+
+  writeTVar blockMap newBlMap
+  writeTVar repMap newRepMap
   mapM_ (\(k,a) -> sendSTM nameNode pid $ CDNRep k $
                     selectDataNodes (repFactor - S.size a + 1) dNodes)
                                                         (M.toList torepmap)

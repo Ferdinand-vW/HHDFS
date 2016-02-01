@@ -45,7 +45,7 @@ data CDNReq = CDNRead BlockId (SendPort FileData)
             | CDNWrite BlockId FileData
             | CDNDelete BlockId
             | CDNRep BlockId [ProcessId]
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic, Show)
 
 data BlockReport = BlockReport DataNodeId [BlockId]
   deriving (Typeable, Generic)

@@ -72,6 +72,7 @@ handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
 handleMessages nnid myid tvarbids = do
   forever $ do
     msg <- expect :: Process CDNReq
+    say $ ("received " ++ (show msg))
     case msg of
       CDNRep bid pids -> do
         file <- liftIO $ B.readFile (getFileName bid)
@@ -92,7 +93,7 @@ sendBlockReports :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
 sendBlockReports nnid myid tvarbids = do
     bids <- liftIO $ readTVarIO tvarbids
     loop bids
-  where 
+  where
     loop oldbids = do
       newbids <- liftIO $ readNewBlockIds tvarbids oldbids --Blocking call, waits for blockIds to be changed
       send nnid (BlockReport myid newbids)
@@ -103,7 +104,7 @@ writeBlockReports :: TVar [BlockId] -> Process ()
 writeBlockReports tvarbids = do
     bids <- liftIO $ readTVarIO tvarbids
     liftIO $ loop bids
-  where 
+  where
     loop oldbids = do
       newbids <- readNewBlockIds tvarbids oldbids
       writeDataNodeBlocks newbids --Write the blockIds to file
