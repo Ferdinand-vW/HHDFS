@@ -20,11 +20,14 @@ import Messages
 listFilesReq :: Handle -> IO [FilePath]
 listFilesReq h = do
   let lf = toByteString ListFiles
-  B.hPutStrLn h lf
-
-  msg <- B.hGetLine h
-  let FilePaths xs = fromByteString msg
-  return xs
+  open <- hIsOpen h
+  if open
+    then do
+      B.hPutStrLn h lf
+      msg <- B.hGetLine h
+      let FilePaths xs = fromByteString msg
+      return xs
+    else error "handle is closed"
 
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
 writeFileReq host h localFile remotePath = do
@@ -39,14 +42,16 @@ writeFileReq host h localFile remotePath = do
       writeBlock (port,bid) fblock = do
         putStrLn "Write a block"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
+        hSetBuffering handle NoBuffering
         putStrLn "Was able to connect"
+        putStrLn $ show (toByteString $ CDNWrite bid fblock)
         B.hPutStrLn handle (toByteString $ CDNWrite bid fblock)
         putStrLn "Send a message"
         hClose handle
   putStrLn $ "Received write address: " ++ show res
   case res of
     Left e -> putStrLn $ show e
-    Right addrs -> zipWithM_ writeBlock addrs (chunksOf (fromIntegral blockSize) fdata)
+    Right addrs -> zipWithM_ writeBlock addrs (chunksOf (fromIntegral blockSize) fdata) >> putStrLn "done writing"
 
 readFileReq :: Host -> Handle -> FilePath -> IO (Maybe FileData)
 readFileReq host h fpath = do
@@ -57,11 +62,15 @@ readFileReq host h fpath = do
   let ReadAddress mexists = fromByteString resp
       readBlock bs (port,bid) = do
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
+        hSetBuffering handle NoBuffering
+        putStrLn "Connected"
         B.hPutStrLn handle (toByteString $ CDNRead bid)
+        putStrLn "Send read command"
         fdata <- B.hGetLine h
+        putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
         return $ B.append bs fd 
-
+  putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
     Right addrs -> Just <$> foldM readBlock B.empty addrs

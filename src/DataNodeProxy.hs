@@ -3,8 +3,8 @@ module DataNodeProxy where
 import Network
 import Control.Distributed.Process hiding (handleMessage)
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as L
 import System.IO
-import Data.Binary(encode,decode)
 import Control.Monad(forever)
 
 import Messages
@@ -12,16 +12,16 @@ import Messages
 datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
+  liftIO $ hSetBuffering h NoBuffering
   say "received connection"
   handleClient h pid
 
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
+  say $ "wait for message"
   msg <- liftIO $ B.hGetLine h
   say $ "received msg"
   say $ show msg
-  let CDNWrite bid fdata = fromByteString msg
-  say $ show bid
   handleMessage (fromByteString msg) h pid
   liftIO $ hClose h
 
@@ -31,7 +31,9 @@ handleMessage (CDNRead bid) h pid = do
   (sendport, receiveport) <- newChan
   send pid (CDNReadP bid sendport)
   resp <- receiveChan receiveport
-  liftIO $ B.hPutStrLn h $ toByteString $ FileBlock resp
+  say $ show resp
+  liftIO $ B.hPutStr h $ toByteString $ FileBlock resp
+  say $ "send fileblock"
 
 handleMessage (CDNWrite bid fd) h pid = do
   say $ "received write request"

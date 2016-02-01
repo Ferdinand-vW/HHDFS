@@ -68,7 +68,7 @@ setupClient :: (Handle -> IO()) -> Host -> Port -> Host -> Port -> IO ()
 setupClient p host port phost pport = do
   --First we try to connect to the proxy server
   h <- connectTo phost (PortNumber $ fromIntegral $ read pport)
-  hSetBuffering h NoBuffering
+  hSetBuffering h LineBuffering
   p h
     {-addrinfos <- getAddrInfo Nothing (Just phost) (Just pport)
     let proxyAddr = head addrinfos

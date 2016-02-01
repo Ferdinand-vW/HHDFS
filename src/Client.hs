@@ -18,12 +18,16 @@ import Messages
 -- Example client
 client :: Host -> Handle -> IO ()
 client host h = do
+  putStrLn "Wait for input"
   input <- getLine --parse some input
+  putStrLn "received input"
   case words input of
     ["show"] -> do
+      putStrLn "test"
       fsimage <- listFilesReq h
+      showFSImage fsimage
       client host h
-    ["write",localFile,remotePath] -> writeFileReq host h localFile remotePath >> client host h --Write a file onto the network
+    ["write",localFile,remotePath] -> writeFileReq host h localFile remotePath >> putStrLn "read file" >> client host h --Write a file onto the network
     ["read",path] -> do
         mfdata <- readFileReq host h path --Retrieve the file
         writeToDisk path mfdata --Write file to disk

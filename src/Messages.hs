@@ -71,7 +71,7 @@ data ProxyToDataNode = CDNReadP BlockId (SendPort FileData)
 data ClientToDataNode = CDNRead BlockId
                       | CDNWrite BlockId FileData
                       | CDNDelete BlockId
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic, Show)
 
 data IntraNetwork = Repl BlockId [ProcessId]
   deriving (Typeable, Generic)

@@ -96,6 +96,7 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
         { fsImage = newfsImage }
 
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
+  say $ "Received read"
   case M.lookup fp fsImage of
     Nothing -> sendChan chan (Left FileNotFound)
     Just bids -> do
@@ -103,6 +104,7 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       --let mpids = M.lookup bid (M.unionWith S.union blockMap repMap)
       let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union blockMap repMap, bid)) bids
       let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrMap, bid)) mpids
+      say $ "send addresses back"
       sendChan chan (Right res)
   return nameNode
 
