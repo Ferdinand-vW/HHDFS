@@ -26,7 +26,7 @@ client host port = do
   putStrLn "Try to connect to namenode"
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   putStrLn "Connected to namenode"
-  hSetBuffering h NoBuffering
+  hSetBuffering h LineBuffering
   void $ case words input of
           ["show"] -> do
             putStrLn "test"

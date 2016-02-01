@@ -36,7 +36,6 @@ writeFileReq host h localFile remotePath = do
   flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
   let blockCount = 1 + fromIntegral (flength `div` blockSize)
   B.hPutStrLn h $ toByteString $ Write remotePath blockCount
-
   resp <- B.hGetLine h
   let WriteAddress res = fromByteString resp
       writeBlock (port,bid) fblock = do
@@ -63,13 +62,14 @@ readFileReq host h fpath = do
       readBlock bs (port,bid) = do
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
         hSetBuffering handle NoBuffering
-        putStrLn "Connected"
+        open <- hIsOpen handle
+        putStrLn $ "handle is " ++ show open
         B.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
-        fdata <- B.hGetLine h
+        fdata <- B.hGetContents handle
         putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
-        return $ B.append bs fd 
+        return $ B.empty
   putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
