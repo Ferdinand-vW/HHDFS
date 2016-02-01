@@ -37,7 +37,7 @@ data HandShake = HandShake
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)
 
-data ProxyToNameNode = ListFilesP (SendPort [FilePath])
+data ProxyToNameNode = ListFilesP (SendPort (ClientRes [FilePath]))
                     | ReadP FilePath (SendPort (ClientRes [RemoteAddress]))
                     | WriteP FilePath BlockCount (SendPort (ClientRes [RemoteAddress]))
                     | Shutdown
@@ -48,7 +48,7 @@ data ClientToNameNode = ListFiles
                       | Write FilePath BlockCount
   deriving (Typeable, Generic)
 
-data ProxyToClient = FilePaths [FilePath]
+data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | ReadAddress (ClientRes [RemoteAddress])
                    | WriteAddress (ClientRes [RemoteAddress])
                    | FileBlock FileData
@@ -65,7 +65,7 @@ data ClientError = InvalidPathError
 data ProxyToDataNode = CDNReadP BlockId (SendPort FileData)
             | CDNWriteP BlockId FileData
             | CDNDeleteP BlockId
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic, Show)
 
 data ClientToDataNode = CDNRead BlockId
                       | CDNWrite BlockId FileData
@@ -73,6 +73,7 @@ data ClientToDataNode = CDNRead BlockId
   deriving (Typeable, Generic, Show)
 
 data IntraNetwork = Repl BlockId [ProcessId]
+  deriving (Typeable, Generic, Show)
 
 data BlockReport = BlockReport DataNodeId [BlockId]
   deriving (Typeable, Generic)

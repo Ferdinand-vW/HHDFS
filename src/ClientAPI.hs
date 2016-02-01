@@ -22,14 +22,12 @@ import Messages
 listFilesReq :: Handle -> IO [FilePath]
 listFilesReq h = do
   let lf = toByteString ListFiles
-  open <- hIsOpen h
-  if open
-    then do
-      L.hPutStrLn h lf
-      msg <- L.hGetContents h
-      let FilePaths xs = fromByteString msg
-      return xs
-    else error "handle is closed"
+  L.hPutStrLn h lf
+  msg <- L.hGetContents h
+  let FilePaths xs = fromByteString msg
+  case xs of
+    Left e -> error $ show e
+    Right fps -> return fps
 
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
 writeFileReq host h localFile remotePath = do
