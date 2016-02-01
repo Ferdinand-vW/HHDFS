@@ -14,10 +14,11 @@ namenodeproxy :: Socket -> ProcessId -> Process ()
 namenodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
   liftIO $ hSetBuffering h NoBuffering
+  say $ "client connected"
   handleClient h pid
 
 handleClient :: Handle -> ProcessId -> Process ()
-handleClient h pid = forever $ do
+handleClient h pid = do
   msg <- liftIO $ B.hGetLine h
   handleMessage (decode $ L.fromStrict msg) h pid
 
