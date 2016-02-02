@@ -258,7 +258,7 @@ randomValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val  = xs !! a
       ([x],ys) = L.partition (==val) xs
-      (g',zs) = randomValues g 0 ys
+      (g',zs) = randomValues g (n - 1) ys
   in (g',x:zs)
 
 
