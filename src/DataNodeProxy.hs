@@ -15,13 +15,13 @@ dnDataDir = "./data/"
 datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
-  liftIO $ hSetBuffering h NoBuffering
-  liftIO $ hSetBinaryMode h True
-  say "received connection"
-  handleClient h pid
+  spawnLocal $ handleClient h pid
 
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
+  liftIO $ hSetBuffering h NoBuffering
+  liftIO $ hSetBinaryMode h True
+  say "received connection"
   say $ "wait for message"
   msg <- liftIO $ L.hGetContents h
   say $ "received msg"

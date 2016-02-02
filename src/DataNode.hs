@@ -99,40 +99,42 @@ dataNode port nnid = do
 handleMessages :: ProcessId -> DataNode -> Process ()
 handleMessages nnid dn@DataNode{..} = forever $ do
   msg <- expect :: Process IntraNetwork
-  case msg of
-    Repl bid pids -> do
-      file <- liftIO $ L.readFile (getFileName bid)
-      unless (null pids) (
-        liftIO $ atomically $ do
-          writeIOChan dn $ say $ "received repl request to " ++ show pids
-          sendSTM dn (head pids) (WriteFile bid file (tail pids))
-        )
-    WriteFile bid fdata pids -> do
-      liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
-      liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-      unless (null pids) (
-        liftIO $ atomically $ do
-          writeIOChan dn $ say $ "received request to replcate block" ++ show bid
-          sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
-        )
+  spawnLocal $  
+    case msg of
+      Repl bid pids -> do
+        file <- liftIO $ L.readFile (getFileName bid)
+        unless (null pids) (
+          liftIO $ atomically $ do
+            writeIOChan dn $ say $ "received repl request to " ++ show pids
+            sendSTM dn (head pids) (WriteFile bid file (tail pids))
+          )
+      WriteFile bid fdata pids -> do
+        liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
+        liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+        unless (null pids) (
+          liftIO $ atomically $ do
+            writeIOChan dn $ say $ "received request to replcate block" ++ show bid
+            sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
+          )
 
 
 handleProxyMessages :: ProcessId -> DataNode -> Process ()
 handleProxyMessages nnid dn@DataNode{..} =
   forever $ do
     msg <- expect :: Process ProxyToDataNode
-    case msg of
-      CDNWriteP bid -> do
-        say "received write from proxy"
-        liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-      CDNDeleteP bid -> do
-        let fileName = getFileName bid
-        fileExists <- liftIO $ doesFileExist fileName
-        when fileExists (
-          liftIO $ atomically $ do
-            writeIOChan dn (liftIO $ removeFile (getFileName bid))
-            modifyTVar blockIds $ \xs -> filter (/=bid) xs
-          )
+    spawnLocal $ 
+      case msg of
+        CDNWriteP bid -> do
+          say "received write from proxy"
+          liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+        CDNDeleteP bid -> do
+          let fileName = getFileName bid
+          fileExists <- liftIO $ doesFileExist fileName
+          when fileExists (
+            liftIO $ atomically $ do
+              writeIOChan dn (liftIO $ removeFile (getFileName bid))
+              modifyTVar blockIds $ \xs -> filter (/=bid) xs
+            )
 
 sendBlockReports :: ProcessId -> DataNode -> Process ()
 sendBlockReports nnid dn@DataNode{..} = forever $ do

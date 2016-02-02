@@ -13,12 +13,12 @@ import Messages
 namenodeproxy :: Socket -> ProcessId -> Process ()
 namenodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
-  liftIO $ hSetBuffering h NoBuffering
-  say $ "client connected"
-  handleClient h pid
+  spawnLocal $ handleClient h pid
 
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
+  liftIO $ hSetBuffering h NoBuffering
+  say $ "client connected"
   msg <- liftIO $ L.hGetContents h
   handleMessage (decode msg) h pid
 
