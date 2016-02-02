@@ -189,6 +189,7 @@ handleClients nameNode@NameNode{..} Shutdown = do
 handleBlockReport :: NameNode -> BlockReport -> STM ()
 handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   writeIOChan nameNode $ say $ "received blockrep from " ++ (show dnodeId)
+  writeIOChan nameNode $ say $ "blocks: " ++ (show blocks)
   bMap <- readTVar blockMap
   rMap <- readTVar repMap
   idPidMap <- readTVar dnIdPidMap
@@ -222,8 +223,9 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
   mapM_ (\(k,a) -> do
-    let dataNodesPids = mapMaybe (`M.lookup` idPidMap) dNodes
+    let dataNodesPids = filter (/=pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
     dnIds <- selectRandomDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
+    writeIOChan nameNode $ say $ "Chosen dnIds " ++ (show dnIds)
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
   return ()

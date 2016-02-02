@@ -114,6 +114,7 @@ handleMessages nnid dn@DataNode{..} = forever $ do
         unless (null pids) (
           liftIO $ atomically $ do
             writeIOChan dn $ say $ "received request to replcate block" ++ show bid
+            writeIOChan dn $ say $ "copying block to " ++ show (head pids)
             sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
           )
 
