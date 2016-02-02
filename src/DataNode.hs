@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module DataNode where
 
 import Control.Concurrent(threadDelay)
@@ -7,10 +9,18 @@ import Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
-import Control.Monad (when, forever, unless)
+import Control.Monad (when, forever, unless, join)
 import Data.Binary
+import Data.Typeable
+
 
 import Messages
+
+data DataNode = DataNode {
+    dnId :: DataNodeId
+  , blockIds :: TVar [BlockId]
+  , procChan :: TChan (Process ())
+}
 
 dnDataDir, dnConfDir, dnConfFile :: String
 dnDataDir = "./data/"
@@ -39,94 +49,126 @@ verifyConfig nnid = do
     res <- receiveChan receivePort -- Recieve the ID from the namenode and store it locally
     liftIO $ writeDataNodeId res
 
-verifyBlocks :: Process [BlockId]
-verifyBlocks = do
-  fileExist <- liftIO $ doesFileExist dnBlockFile
-  unless fileExist $ do
-    liftIO $ writeDataNodeBlocks []
-  liftIO $ readDataNodeBlocks
+readBlocks :: IO [BlockId]
+readBlocks = do
+  fileExist <- doesFileExist dnBlockFile
+  unless fileExist $ writeDataNodeBlocks []
+  readDataNodeBlocks
 
 dataNode :: Port -> ProcessId -> Process ()
 dataNode port nnid = do
 
   pid <- getSelfPid
 
+  -- Check that the needed folders exist and create them if they dont
   liftIO $ createDirectoryIfMissing False dnDataDir
   liftIO $ createDirectoryIfMissing False dnConfDir
 
+  -- Check we have an available id to read or obtain one
   verifyConfig nnid
-  bids <- verifyBlocks
 
+  -- Read existing blocks and id
+  bids <- liftIO readBlocks
   dnId <- liftIO readDataNodeId
+
+  pChan <- liftIO newTChanIO
+  sendChan <- liftIO newTChanIO
   tvarbids <- liftIO $ newTVarIO bids
+
+  -- Setup a port for the proxy
   let port' = show $ 1 + read port
-  pid' <- spawnLocal $ handleMessages nnid dnId tvarbids
+
+  -- Initialize DataNode
+  let dn = DataNode { dnId=dnId , blockIds=tvarbids, procChan=pChan}
+
+  -- spawn the main dataNode process
+  pid' <- spawnLocal $ handleMessages nnid dn
   send nnid $ HandShake pid' dnId bids port'
 
   --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
-  spawnLocal $ sendBlockReports nnid dnId tvarbids
+  spawnLocal $ sendBlockReports nnid dn
   --Spawn a local process, which writes the blockIds that this datanode holds to file
   --after every added or deleted blockId
-  spawnLocal $ writeBlockReports tvarbids
+  spawnLocal $ writeBlockReports dn
 
-  handleProxyMessages nnid dnId tvarbids
+   -- spawn local proxy to execute process and IO actions
+  spawnLocal $ spawnProcListener dn
 
-handleMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
-handleMessages nnid myid tvarbids = forever $ do
+  handleProxyMessages nnid dn
+
+handleMessages :: ProcessId -> DataNode -> Process ()
+handleMessages nnid dn@DataNode{..} = forever $ do
   msg <- expect :: Process IntraNetwork
   case msg of
     Repl bid pids -> do
-      say $ "received repl request to " ++ show pids
       file <- liftIO $ L.readFile (getFileName bid)
-      unless (null pids) $ send (head pids) (WriteFile bid file (tail pids))
+      unless (null pids) (
+        liftIO $ atomically $ do
+          writeIOChan dn $ say $ "received repl request to " ++ show pids
+          sendSTM dn (head pids) (WriteFile bid file (tail pids))
+        )
     WriteFile bid fdata pids -> do
-      say $ "received request to replcate block" ++ show bid
       liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
-      liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
-      unless (null pids) $ send (head pids) (WriteFile bid fdata (tail pids))
+      liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+      unless (null pids) (
+        liftIO $ atomically $ do
+          writeIOChan dn $ say $ "received request to replcate block" ++ show bid
+          sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
+        )
 
 
-handleProxyMessages :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
-handleProxyMessages nnid myid tvarbids = do
+handleProxyMessages :: ProcessId -> DataNode -> Process ()
+handleProxyMessages nnid dn@DataNode{..} =
   forever $ do
     msg <- expect :: Process ProxyToDataNode
     case msg of
       CDNWriteP bid -> do
         say "received write from proxy"
-        liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
-      CDNDeleteP bid -> liftIO $ do
+        liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+      CDNDeleteP bid -> do
         let fileName = getFileName bid
-        fileExists <- doesFileExist fileName
-        when fileExists $ removeFile (getFileName bid)
-        liftIO $ atomically $ modifyTVar tvarbids $ \xs -> filter (/=bid) xs
+        fileExists <- liftIO $ doesFileExist fileName
+        when fileExists (
+          liftIO $ atomically $ do
+            writeIOChan dn (liftIO $ removeFile (getFileName bid))
+            modifyTVar blockIds $ \xs -> filter (/=bid) xs
+          )
 
-sendBlockReports :: ProcessId -> DataNodeId -> TVar [BlockId] -> Process ()
-sendBlockReports nnid myid tvarbids = do
-    bids <- liftIO $ readTVarIO tvarbids
-    loop bids
+sendBlockReports :: ProcessId -> DataNode -> Process ()
+sendBlockReports nnid dn@DataNode{..} = forever $ do
+    bids <- liftIO $ readTVarIO blockIds
+    liftIO $ threadDelay 20000
+    checkStatus bids
   where
-    loop oldbids = do
-      newbids <- liftIO $ readNewBlockIds tvarbids oldbids --Blocking call, waits for blockIds to be changed
-      send nnid (BlockReport myid newbids)
-      liftIO $ threadDelay 2000000 --Send a blockreport at most every 2 seconds
-      loop newbids
+    checkStatus oldbids = liftIO $ atomically $ do
+      newbids <- readNewBlockIds dn oldbids --Blocking call, waits for blockIds to be changed
+      sendSTM dn nnid (BlockReport dnId newbids)
 
-writeBlockReports :: TVar [BlockId] -> Process ()
-writeBlockReports tvarbids = do
-    bids <- liftIO $ readTVarIO tvarbids
-    liftIO $ loop bids
-  where
-    loop oldbids = do
-      newbids <- readNewBlockIds tvarbids oldbids
-      writeDataNodeBlocks newbids --Write the blockIds to file
-      loop newbids
+writeBlockReports :: DataNode -> Process ()
+writeBlockReports dn@DataNode{..} = forever $ liftIO $ atomically $ do
+    bids <- readTVar blockIds
+    newbids <- readNewBlockIds dn bids
+    writeIOChan dn $ liftIO $ writeDataNodeBlocks newbids
 
-readNewBlockIds :: TVar [BlockId] -> [BlockId] -> IO [BlockId]
-readNewBlockIds tvarbids oldbids = atomically $ do
-    newbids <- readTVar tvarbids
+readNewBlockIds :: DataNode -> [BlockId] -> STM [BlockId]
+readNewBlockIds dn@DataNode{..} oldbids = do
+    newbids <- readTVar blockIds
     if newbids /= oldbids
         then return newbids
         else retry
 
 getFileName :: BlockId -> FilePath
 getFileName bid = dnDataDir ++ show bid ++ ".dat"
+
+
+spawnProcListener :: DataNode -> Process ()
+spawnProcListener DataNode{..} = forever $ join $ liftIO $ atomically $ readTChan procChan
+
+sendSTM :: (Typeable a, Binary a) => DataNode -> ProcessId -> a -> STM ()
+sendSTM DataNode{..} pid msg = writeTChan procChan (send pid msg)
+
+sendChanSTM :: (Typeable a, Binary a) => DataNode -> SendPort a -> a -> STM ()
+sendChanSTM DataNode{..} chan msg = writeTChan procChan (sendChan chan msg)
+
+writeIOChan :: DataNode -> Process () -> STM ()
+writeIOChan DataNode{..} = writeTChan procChan

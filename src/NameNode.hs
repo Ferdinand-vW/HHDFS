@@ -36,9 +36,8 @@ data NameNode = NameNode
   , dnIdAddrMap :: TVar DataNodeAddressMap
   , blockMap :: TVar BlockMap
   , repMap :: TVar BlockMap
-  , proxyChan :: TChan (Process ())
+  , procChan :: TChan (Process ())
   , blockIdCounter :: TVar Int
-  , ioChan :: TChan (Process ())
   }
 
 nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
@@ -56,7 +55,6 @@ mkNameNode = do
   oldBlockId <- unsafeIOToSTM readBlockId
 
   pChan <- newTChan
-  ioChan <- newTChan
   fsImg <- newTVar oldFsImg
   dnMap <- newTVar oldDnMap
   addrMap <- newTVar M.empty
@@ -71,8 +69,7 @@ mkNameNode = do
                 , dnIdAddrMap = addrMap
                 , blockMap=bMap
                 , repMap=rMap
-                , proxyChan=pChan
-                , ioChan = ioChan
+                , procChan=pChan
                 , blockIdCounter = blockId }
 
 nameNode :: Process ()
@@ -81,10 +78,7 @@ nameNode = do
 
   nn <- liftIO $ atomically mkNameNode
 
-  spawnLocal (proxy nn) -- spawn local proxy to execute process actions
-  ioThread <- spawnLocal (proxyIO nn) -- spawn io proxy to flush data to disk
-
-  link ioThread
+  spawnLocal (spawnProcListener nn) -- spawn local proxy to execute process and IO actions
 
   forever $
     receiveWait
@@ -133,14 +127,14 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
   if not $ isValid fp
   then sendChanSTM nameNode chan (Left InvalidPathError)
   else do
-    let 
+    let
       dnodePids = mapMaybe (`M.lookup` idPidMap) dNodes
       dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrs) dNodes
       selectedDnodes = take blockCount $ map (pick dnodeAddrs (takeFileName fp)) [0..]
       positions = zip selectedDnodes [(blockId + 1)..]
       updateFsImg = M.insert fp (map snd positions)
       maxBlockId = blockId + length selectedDnodes
-    
+
     writeIOChan nameNode $ say $ "response for client " ++ (show positions)
     writeIOChan nameNode $ liftIO $ flushBlockId maxBlockId
     writeIOChan nameNode $ liftIO $ flushFsImage nameNode
@@ -234,20 +228,17 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 ------- UTILITY ------
 
 
-proxy :: NameNode -> Process ()
-proxy NameNode{..} = forever $ join $ liftIO $ atomically $ readTChan proxyChan
-
-proxyIO :: NameNode -> Process ()
-proxyIO NameNode{..} = forever $ join $ liftIO $ atomically $ readTChan ioChan
+spawnProcListener :: NameNode -> Process ()
+spawnProcListener NameNode{..} = forever $ join $ liftIO $ atomically $ readTChan procChan
 
 sendSTM :: (Typeable a, Binary a) => NameNode -> ProcessId -> a -> STM ()
-sendSTM NameNode{..} pid msg = writeTChan proxyChan (send pid msg)
+sendSTM NameNode{..} pid msg = writeTChan procChan (send pid msg)
 
 sendChanSTM :: (Typeable a, Binary a) => NameNode -> SendPort a -> a -> STM ()
-sendChanSTM NameNode{..} chan msg = writeTChan proxyChan (sendChan chan msg)
+sendChanSTM NameNode{..} chan msg = writeTChan procChan (sendChan chan msg)
 
 writeIOChan :: NameNode -> Process () -> STM ()
-writeIOChan NameNode{..} = writeTChan ioChan
+writeIOChan NameNode{..} = writeTChan procChan
 
 -- Another naive implementation to find the next free block id given a datanode
 -- This should be changed to something more robust and performant
@@ -294,4 +285,4 @@ readBlockId :: IO Int
 readBlockId = do
   fileExist <- liftIO $ doesFileExist blockIdFile
   unless fileExist $ liftIO $ flushBlockId 0
-  decodeFile blockIdFile 
+  decodeFile blockIdFile
