@@ -222,7 +222,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
   mapM_ (\(k,a) -> do
-    let dataNodesPids = mapMaybe (`M.lookup` idPidMap) dNodes
+    let dataNodesPids = filter (/= pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
     dnIds <- selectRandomDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
@@ -258,7 +258,7 @@ randomValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val  = xs !! a
       ([x],ys) = L.partition (==val) xs
-      (g',zs) = randomValues g 0 ys
+      (g',zs) = randomValues g (n - 1) ys
   in (g',x:zs)
 
 
