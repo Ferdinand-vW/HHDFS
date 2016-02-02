@@ -61,10 +61,12 @@ readFileReq host h fpath = do
   resp <- L.hGetContents h
   let ReadAddress mexists = fromByteString resp
       readBlock bs (port,bid) = do
+        putStrLn "Try to connect to datanode"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
         hSetBuffering handle NoBuffering
         hSetBinaryMode handle True
         open <- hIsOpen handle
+        putStrLn "Connected to datanode"
         L.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
         fdata <- L.hGetContents handle

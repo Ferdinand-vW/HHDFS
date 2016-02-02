@@ -91,12 +91,8 @@ handleProxyMessages nnid myid tvarbids = do
   forever $ do
     msg <- expect :: Process ProxyToDataNode
     case msg of
-      CDNReadP bid sendPort -> do
-        file <- liftIO $ L.readFile (getFileName bid)
-        sendChan sendPort file
-      CDNWriteP bid file -> do
+      CDNWriteP bid -> do
         say "received write from proxy"
-        liftIO $ B.writeFile (getFileName bid) (L.toStrict file)
         liftIO $ atomically $ modifyTVar tvarbids $ \xs -> bid : xs
       CDNDeleteP bid -> liftIO $ do
         let fileName = getFileName bid
@@ -131,7 +127,6 @@ readNewBlockIds tvarbids oldbids = atomically $ do
     if newbids /= oldbids
         then return newbids
         else retry
-
 
 getFileName :: BlockId -> FilePath
 getFileName bid = dnDataDir ++ show bid ++ ".dat"

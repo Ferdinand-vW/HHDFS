@@ -14,6 +14,7 @@ type DataNodeId = Int
 type BlockId = Int
 type Host = String
 type Port = String
+type FileName = String
 type LocalPosition = (DataNodeId, BlockId)
 type RemotePosition = (ProcessId, BlockId)
 type RemoteAddress = (Port,BlockId)
@@ -63,9 +64,8 @@ data ClientError = InvalidPathError
                  | InconsistentNetwork
   deriving (Typeable, Generic, Show)
 
-data ProxyToDataNode = CDNReadP BlockId (SendPort FileData)
-            | CDNWriteP BlockId FileData
-            | CDNDeleteP BlockId
+data ProxyToDataNode = CDNWriteP BlockId
+                     | CDNDeleteP BlockId
   deriving (Typeable, Generic, Show)
 
 data ClientToDataNode = CDNRead BlockId

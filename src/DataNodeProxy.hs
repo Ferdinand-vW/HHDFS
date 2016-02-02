@@ -10,6 +10,8 @@ import Control.Monad (forever)
 
 import Messages
 
+dnDataDir = "./data/"
+
 datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = forever $ do
   (h,_,_) <- liftIO $ accept socket
@@ -26,31 +28,22 @@ handleClient h pid = do
 
   handleMessage (fromByteString msg) h pid
 
-{-getData :: Handle -> Process L.ByteString
-getData h = chunks B.empty
-  where
-    chunks xs = do
-      eof <- liftIO $ hIsEOF h
-      if eof
-        then do say "handle is empty"; return xs
-        else do
-          say "handle not empty yet"
-          chnk <- liftIO $ L.hGetLine h
-          chunks (xs `L.append` chnk)-}
-
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
   say "received read"
-  (sendport, receiveport) <- newChan
-  send pid (CDNReadP bid sendport)
-  resp <- receiveChan receiveport
-  liftIO $ L.hPutStrLn h $ toByteString $ FileBlock resp
+  file <- liftIO $ L.readFile (getFileName bid)
+  liftIO $ L.hPutStrLn h $ toByteString $ FileBlock file
   say $ "send fileblock"
 
 handleMessage (CDNWrite bid fd) h pid = do
   say $ "received write request"
-  send pid (CDNWriteP bid fd)
+  liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
+  send pid (CDNWriteP bid)
+
 
 handleMessage (CDNDelete bid) h pid = do
   say "received delete"
   send pid (CDNDeleteP bid)
+
+getFileName :: BlockId -> FilePath
+getFileName bid = dnDataDir ++ show bid ++ ".dat"
