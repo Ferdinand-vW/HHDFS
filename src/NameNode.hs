@@ -11,12 +11,14 @@ import            Data.Map (Map)
 import qualified  Data.Map as M
 import            Control.Monad (unless, forever, join, void)
 import qualified  Data.Set as S
+import qualified  Data.List as L
 import            Data.Char (ord)
 
 import            Data.Maybe (fromJust, mapMaybe, fromMaybe)
 import            Data.Binary (encodeFile, decodeFile, Binary)
 import            Data.Typeable
 import            System.Directory (doesFileExist, createDirectoryIfMissing)
+import            System.Random
 
 import            Messages
 
@@ -38,6 +40,7 @@ data NameNode = NameNode
   , repMap :: TVar BlockMap
   , procChan :: TChan (Process ())
   , blockIdCounter :: TVar Int
+  , randomVar :: TVar StdGen
   }
 
 nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
@@ -62,6 +65,7 @@ mkNameNode = do
   bMap <- newTVar M.empty
   rMap <- newTVar M.empty
   blockId <- newTVar oldBlockId
+  rVar <- newTVar $ mkStdGen 0
 
   return NameNode { dataNodes=dNodes
                 , fsImage=fsImg
@@ -70,7 +74,8 @@ mkNameNode = do
                 , blockMap=bMap
                 , repMap=rMap
                 , procChan=pChan
-                , blockIdCounter = blockId }
+                , blockIdCounter=blockId
+                , randomVar=rVar }
 
 nameNode :: Process ()
 nameNode = do
@@ -130,7 +135,10 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
     let
       dnodePids = mapMaybe (`M.lookup` idPidMap) dNodes
       dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrs) dNodes
-      selectedDnodes = take blockCount $ map (pick dnodeAddrs (takeFileName fp)) [0..]
+
+    selectedDnodes <- selectRandomDataNodes nameNode blockCount dnodeAddrs
+
+    let
       positions = zip selectedDnodes [(blockId + 1)..]
       updateFsImg = M.insert fp (map snd positions)
       maxBlockId = blockId + length selectedDnodes
@@ -209,19 +217,15 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   --we send a Replication request to the `current` dataNode to send that BlockId to the selected dataNodes
       pid = fromMaybe (error "This should not happen") $ M.lookup dnodeId idPidMap
 
-      --Simple method for selecting datanodes that we want to replicate to
-      selectDataNodes :: Int  -> [DataNodeId] -> [ProcessId]
-      selectDataNodes n dataNodes = take n $ filter (/= pid) dataNodesPids
-        where
-          dataNodesPids = mapMaybe (`M.lookup` idPidMap) dataNodes
-
   writeIOChan nameNode $ say $ "new repmap " ++ (show newRepMap)
 
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
-  mapM_ (\(k,a) -> sendSTM nameNode pid $ Repl k $
-                    selectDataNodes (repFactor - S.size a + 1) dNodes)
-                                                        (M.toList torepmap)
+  mapM_ (\(k,a) -> do
+    let dataNodesPids = mapMaybe (`M.lookup` idPidMap) dNodes
+    dnIds <- selectRandomDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
+    sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
+
   return ()
 
 
@@ -240,19 +244,23 @@ sendChanSTM NameNode{..} chan msg = writeTChan procChan (sendChan chan msg)
 writeIOChan :: NameNode -> Process () -> STM ()
 writeIOChan NameNode{..} = writeTChan procChan
 
--- Another naive implementation to find the next free block id given a datanode
--- This should be changed to something more robust and performant
-nextBidFor :: DataNodeId -> [LocalPosition] -> BlockId
-nextBidFor _   []        = 0
-nextBidFor pid positions = maximum (map toBid positions) + 1
-  where
-    toBid (nnodePid, blockId) | nnodePid == pid = blockId
-                              | otherwise       = 0
+selectRandomDataNodes :: Eq a => NameNode -> Int -> [a] -> STM [a]
+selectRandomDataNodes nn@NameNode{..} n datanodes = do
+ g <- readTVar randomVar
+ let (g',r) = randomValues g n datanodes
+ writeTVar randomVar g'
+ return r
 
--- For the time being we can pick the dataNode where to store a file with this
--- naive technique.
-pick :: [a] -> String -> Int -> a
-pick pids s bix = pids !! ((ord (head s) + bix) `mod` length pids)
+
+randomValues :: Eq a => StdGen -> Int -> [a] -> (StdGen,[a])
+randomValues gen 0 _ = (gen,[])
+randomValues gen n xs =
+  let (a,g) = randomR (0,length xs - 1) gen
+      val  = xs !! a
+      ([x],ys) = L.partition (==val) xs
+      (g',zs) = randomValues g 0 ys
+  in (g',x:zs)
+
 
 
 flushFsImage :: NameNode -> IO ()
