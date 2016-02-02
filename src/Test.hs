@@ -1,11 +1,14 @@
 module Test where
 
+import System.IO
 import System.Directory
 import Control.Distributed.Process
+import Network
 import System.Random (mkStdGen, randoms)
 import Control.Monad (zipWithM_)
 import System.FilePath (takeFileName)
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy.Char8 as L
 
 import Messages (FileData)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
@@ -16,30 +19,40 @@ testDir = "./test_files"
 testFileCount :: Int
 testFileCount = 3
 
-testClient :: ProcessId -> Process ()
-testClient pid = do
-  liftIO $ createTestDir
+testClient :: String -> String -> IO ()
+testClient host port = do
+  createTestDir
   let files = zip generateFiles [0..]
 
       getFilename n = testDir ++ "/file" ++ show n
       fileIn n  = getFilename n ++ ".in"
       fileOut n = getFilename n ++ ".out"
 
-  liftIO $ putStrLn "Generating files..."
-  liftIO $ mapM_ (\(f,n) -> writeFile (fileIn n) f) (take testFileCount files)
+  putStrLn "Generating files..."
+  mapM_ (\(f,n) -> writeFile (fileIn n) f) (take testFileCount files)
 
-  liftIO $ putStrLn "Starting tests..."
+  putStrLn "Starting tests..."
   let fileNums = [0 .. testFileCount - 1]
       testFile n = do
-        liftIO $ putStrLn $ "write " ++ (fileIn n) ++ " " ++ (fileOut n)
-        writeFileReq pid (fileIn n) (fileOut n)
+        h <- connectTo host (PortNumber $ fromIntegral $ read port)
+        hSetBuffering h LineBuffering
+
+        putStrLn $ "write " ++ (fileIn n) ++ " " ++ (fileOut n)
+        writeFileReq host h (fileIn n) (fileOut n)
+
+        hClose h
   mapM_ testFile fileNums
 
   let readBack n = do
+        h <- connectTo host (PortNumber $ fromIntegral $ read port)
+        hSetBuffering h LineBuffering
+
         let filename = "file" ++ show n ++ ".out"
-        liftIO $ putStrLn $ "read " ++ fileOut n
-        file <- readFileReq pid (fileOut n)
+        putStrLn $ "read " ++ fileOut n
+        file <- readFileReq host h (fileOut n)
         writeToDisk filename file
+
+        hClose h
   mapM_ readBack fileNums
 
 createTestDir :: IO ()
@@ -68,9 +81,9 @@ generateLine as = (text, ys)
         text = concatMap ((' ':) . show) xs
 
 
-writeToDisk :: FilePath -> Maybe FileData -> Process ()
+writeToDisk :: FilePath -> Maybe FileData -> IO ()
 writeToDisk fpath mfdata = case mfdata of
-  Nothing -> liftIO $ putStrLn "Could not find file on network"
-  Just fdata -> liftIO $ do
+  Nothing -> putStrLn "Could not find file on network"
+  Just fdata -> do
       createDirectoryIfMissing False "./local"
-      B.writeFile ("./local/" ++ takeFileName fpath) fdata
+      B.writeFile ("./local/" ++ takeFileName fpath) (L.toStrict fdata) --Had to add L.toStrict
