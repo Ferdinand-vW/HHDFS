@@ -21,14 +21,11 @@ smallFiles :: [String]
 smallFiles = ["smallfile1","smallfile2","smallfile3","smallfile4","smallfile5",
               "smallfile6","smallfile7","smallfile8","smallfile9","smallfile10"]
 
+bigFiles :: [String]
+bigFiles = ["bigfile1", "bigfile2", "bigfile3", "bigfile4"]
+
 testDir :: String
 testDir = "./test_files/"
-
--- testFileCount :: Int
--- testFileCount = 1
---
--- files1 = ["test1.txt","test2.txt","test3.txt"]
--- files2 = ["test4.txt","test5.txt","test6.txt"]
 
 testClient :: String -> String -> IO ()
 testClient host port = do
@@ -45,6 +42,11 @@ testClient host port = do
   after <- getTime Realtime
   print $ diffTimeSpec after before
   _ <- getLine
+
+  before <- getTime Realtime
+  writeAndReadManyBigFiles host port
+  after <- getTime Realtime
+  print $ diffTimeSpec after before
   return ()
 
 getPath fname = testDir ++ fname
@@ -52,6 +54,9 @@ fileOut fname = fname ++ ".out"
 
 writeAndReadManySmallFiles :: Host -> Port -> IO [()]
 writeAndReadManySmallFiles h p = testWriteAndRead h p smallFiles
+
+writeAndReadManyBigFiles :: Host -> Port -> IO [()]
+writeAndReadManyBigFiles h p = testWriteAndRead h p bigFiles
 
 writeManySmallFiles :: Host -> Port -> IO [()]
 writeManySmallFiles h p = testManyWrites h p smallFiles
@@ -88,8 +93,6 @@ testRead host port fName = do
   writeToDisk filename file
 
   hClose h
-
-
 
 writeToDisk :: FilePath -> Maybe FileData -> IO ()
 writeToDisk fpath mfdata = case mfdata of
