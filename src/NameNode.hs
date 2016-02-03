@@ -267,8 +267,6 @@ randomValues gen n xs =
       (g',zs) = randomValues g (n - 1) ys
   in (g',x:zs)
 
-
-
 flushFsImage :: NameNode -> IO ()
 flushFsImage NameNode{..} = do
   contents <- atomically $ readTVar fsImage

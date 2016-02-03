@@ -11,7 +11,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import Criterion.Main
 
-import Messages (FileData)
+import Messages (FileData, Host, Port)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
 
 testDir :: String
@@ -25,7 +25,7 @@ testClient host port = do
   createTestDir
   let files = zip generateFiles [0..]
 
-      
+
 
   putStrLn "Generating files..."
   mapM_ (\(f,n) -> writeFile (fileIn n) f) (take testFileCount files)
@@ -33,39 +33,51 @@ testClient host port = do
   putStrLn "Starting tests..."
 
   defaultMain [
-    bgroup "test1" [ bench "1" $ nfIO $ computation host port
-                   , bench "2" $ nfIO $ computation host port
+    bgroup "test1" [ bench "1" $ nfIO $ testManyWrites host port
+                   -- , bench "2" $ nfIO $ testWriteAndRead host port
                    ]
               ]
- 
+
 getFilename n = testDir ++ "/file" ++ show n
 fileIn n  = getFilename n ++ ".in"
-fileOut n = getFilename n ++ ".out"         
+fileOut n = getFilename n ++ ".out"
 
-computation :: String -> String -> IO ()
-computation host port = do
+testManyWrites :: Host -> Port -> IO ()
+testManyWrites host port = do
   let fileNums = [0 .. testFileCount - 1]
-      testFile n = do
-                h <- connectTo host (PortNumber $ fromIntegral $ read port)
-                hSetBuffering h LineBuffering
+  mapM_ (testWrite host port) fileNums
 
-                putStrLn $ "write " ++ (fileIn n) ++ " " ++ (fileOut n)
-                writeFileReq host h (fileIn n) (fileOut n)
+testWrite :: Host -> Port -> Int -> IO ()
+testWrite host port fName = do
+  h <- connectTo host (PortNumber $ fromIntegral $ read port)
+  hSetBuffering h LineBuffering
 
-                hClose h
-  mapM_ testFile fileNums
+  let
+    fIn = fileIn fName
+    fOut = fileOut fName
+  putStrLn $ "writing " ++ fIn ++ " -> " ++ fOut
+  writeFileReq host h fIn fOut
 
-  let readBack n = do
-        h <- connectTo host (PortNumber $ fromIntegral $ read port)
-        hSetBuffering h LineBuffering
+  hClose h
 
-        let filename = "file" ++ show n ++ ".out"
-        putStrLn $ "read " ++ fileOut n
-        file <- readFileReq host h (fileOut n)
-        writeToDisk filename file
+testRead :: Host -> Port -> Int -> IO ()
+testRead host port fName = do
+  h <- connectTo host (PortNumber $ fromIntegral $ read port)
+  hSetBuffering h LineBuffering
 
-        hClose h
-  mapM_ readBack fileNums
+  let filename = "file" ++ show fName ++ ".out"
+  putStrLn $ "read " ++ fileOut fName
+  file <- readFileReq host h (fileOut fName)
+  writeToDisk filename file
+
+  hClose h
+
+testWriteAndRead :: String -> String -> IO ()
+testWriteAndRead host port = do
+  let fileNums = [0 .. testFileCount - 1]
+  mapM_ (testWrite host port) fileNums
+
+  mapM_ (testRead host port) fileNums
 
 createTestDir :: IO ()
 createTestDir = do

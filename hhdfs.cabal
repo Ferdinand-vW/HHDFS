@@ -16,7 +16,7 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 executable hhdfs
-  ghc-options:       -O2 -threaded -rtsopts
+  ghc-options:        -O2 -threaded -rtsopts
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
