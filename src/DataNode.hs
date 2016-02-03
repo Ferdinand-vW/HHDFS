@@ -99,24 +99,25 @@ dataNode port nnid = do
 handleMessages :: ProcessId -> DataNode -> Process ()
 handleMessages nnid dn@DataNode{..} = forever $ do
   msg <- expect :: Process IntraNetwork
-  case msg of
-    Repl bid pids -> do
-      file <- liftIO $ L.readFile (getFileName bid)
-      unless (null pids) (
-        liftIO $ atomically $ do
-          writeIOChan dn $ say $ "received repl request to " ++ show pids
-          sendSTM dn (head pids) (WriteFile bid file (tail pids))
-          writeIOChan dn $ say $ "requeste forwarded"
-        )
-    WriteFile bid fdata pids -> do
-      say $ "received request to replcate block" ++ show bid
-      liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
-      liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-      unless (null pids) (
-        liftIO $ atomically $ do
-          writeIOChan dn $ say $ "copying block to " ++ show (head pids)
-          sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
-        )
+  spawnLocal $ 
+    case msg of
+      Repl bid pids -> do
+        file <- liftIO $ L.readFile (getFileName bid)
+        unless (null pids) (
+          liftIO $ atomically $ do
+            writeIOChan dn $ say $ "received repl request to " ++ show pids
+            sendSTM dn (head pids) (WriteFile bid file (tail pids))
+            writeIOChan dn $ say $ "requeste forwarded"
+          )
+      WriteFile bid fdata pids -> do
+        say $ "received request to replcate block" ++ show bid
+        liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
+        liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+        unless (null pids) (
+          liftIO $ atomically $ do
+            writeIOChan dn $ say $ "copying block to " ++ show (head pids)
+            sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
+          )
 
 
 handleProxyMessages :: ProcessId -> DataNode -> Process ()

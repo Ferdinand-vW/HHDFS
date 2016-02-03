@@ -61,10 +61,6 @@ asyncTestWriteAndRead host port fps = do
   testWriteAndRead host port fps
   return ()
 
-testManyWrites :: Host -> Port -> [String] -> IO ()
-testManyWrites host port fps = do
-  mapM_ (testWrite host port) fps
-
 writeManySmallFiles :: Host -> Port -> IO ()
 writeManySmallFiles h p = testManyWrites h p smallFiles
 
@@ -80,7 +76,7 @@ testWrite host port fName = do
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h LineBuffering
 
-  putStrLn $ "writing " ++ fp ++ " -> " ++ fp
+  putStrLn $ "writing " ++ fName ++ " -> " ++ fName
   let
     fIn = getPath fName
     fOut = fileOut fName
@@ -90,13 +86,13 @@ testWrite host port fName = do
   hClose h
 
 testRead :: Host -> Port -> String -> IO ()
-testRead host port fp = do
+testRead host port fName = do
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h LineBuffering
 
-  let filename = "file" ++ fp ++ ".out"
+  let filename = "file" ++ fName ++ ".out"
   putStrLn $ "read " ++ fName
-  file <- readFileReq host h fp
+  file <- readFileReq host h fName
   writeToDisk filename file
 
   hClose h
