@@ -24,58 +24,50 @@ smallFiles = ["smallfile1","smallfile2","smallfile3","smallfile4","smallfile5",
 testDir :: String
 testDir = "./test_files/"
 
-testFileCount :: Int
-testFileCount = 1
-
-files1 = ["test1.txt","test2.txt","test3.txt"]
-files2 = ["test4.txt","test5.txt","test6.txt"]
+-- testFileCount :: Int
+-- testFileCount = 1
+--
+-- files1 = ["test1.txt","test2.txt","test3.txt"]
+-- files2 = ["test4.txt","test5.txt","test6.txt"]
 
 testClient :: String -> String -> IO ()
 testClient host port = do
   putStrLn "Starting tests..."
 
   before <- getTime Realtime
-  res <- mapConcurrently (asyncTestWriteAndRead host port) [files1,files2]
+  writeManySmallFiles host port
   after <- getTime Realtime
-  putStrLn $ show $ diffTimeSpec after before
+  print $ diffTimeSpec after before
+  _ <- getLine
+
+  before <- getTime Realtime
+  writeAndReadManySmallFiles host port
+  after <- getTime Realtime
+  print $ diffTimeSpec after before
   _ <- getLine
   return ()
 
 getPath fname = testDir ++ fname
 fileOut fname = fname ++ ".out"
 
-writeAndReadManySmallFiles :: Host -> Port -> IO ()
+writeAndReadManySmallFiles :: Host -> Port -> IO [()]
 writeAndReadManySmallFiles h p = testWriteAndRead h p smallFiles
 
-asyncTestWriteAndRead :: Host -> Port -> [String] -> IO ()
-asyncTestWriteAndRead host port fps = do
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  testWriteAndRead host port fps
-  return ()
-
-writeManySmallFiles :: Host -> Port -> IO ()
+writeManySmallFiles :: Host -> Port -> IO [()]
 writeManySmallFiles h p = testManyWrites h p smallFiles
 
-testManyWrites :: Host -> Port -> [FileName] -> IO ()
-testManyWrites host port fnames = do
-  mapM_ (testWrite host port) fnames
+testManyWrites :: Host -> Port -> [FileName] -> IO [()]
+testManyWrites host port fnames = mapConcurrently (testWrite host port) fnames
+
+testWriteAndRead :: Host -> Port -> [FileName] -> IO [()]
+testWriteAndRead host port fNames = do
+  mapConcurrently (testWrite host port) fNames
+  mapConcurrently (testRead host port) (map fileOut fNames)
 
 testWrite :: Host -> Port -> FileName -> IO ()
 testWrite host port fName = do
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h LineBuffering
-
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
-
   putStrLn $ "writing " ++ fName ++ " -> " ++ fName
   let
     fIn = getPath fName
@@ -97,10 +89,6 @@ testRead host port fName = do
 
   hClose h
 
-testWriteAndRead :: Host -> Port -> [FileName] -> IO ()
-testWriteAndRead host port fNames = do
-  mapM_ (testWrite host port) fNames
-  mapM_ (testRead host port) (map fileOut fNames)
 
 
 writeToDisk :: FilePath -> Maybe FileData -> IO ()
