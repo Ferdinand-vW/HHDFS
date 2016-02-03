@@ -65,7 +65,7 @@ mkNameNode = do
   bMap <- newTVar M.empty
   rMap <- newTVar M.empty
   blockId <- newTVar oldBlockId
-  rVar <- newTVar $ mkStdGen 0
+  rVar <- newTVar $ mkStdGen 12
 
   return NameNode { dataNodes=dNodes
                 , fsImage=fsImg

@@ -13,28 +13,25 @@ import qualified Data.ByteString.Lazy.Char8 as L
 import System.Clock
 import Control.Concurrent.Async
 
-import Messages (FileData, Host, Port)
+import Messages (FileData, FileName, Host, Port)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
 
+
+smallFiles :: [String]
+smallFiles = ["smallfile1","smallfile2","smallfile3","smallfile4","smallfile5",
+              "smallfile6","smallfile7","smallfile8","smallfile9","smallfile10"]
+
 testDir :: String
-testDir = "./test_files"
+testDir = "./test_files/"
 
 testFileCount :: Int
-testFileCount = 3
+testFileCount = 1
 
 files1 = ["test1.txt","test2.txt","test3.txt"]
 files2 = ["test4.txt","test5.txt","test6.txt"]
 
 testClient :: String -> String -> IO ()
 testClient host port = do
-  createTestDir
-  let files = zip generateFiles [0..]
-
-
-
-  putStrLn "Generating files..."
-  mapM_ (\(f,n) -> writeFile (fileIn n) f) (take testFileCount files)
-
   putStrLn "Starting tests..."
 
   before <- getTime Realtime
@@ -44,9 +41,11 @@ testClient host port = do
   _ <- getLine
   return ()
 
-getFilename n = testDir ++ "/file" ++ show n
-fileIn n  = getFilename n ++ ".in"
-fileOut n = getFilename n ++ ".out"
+getPath fname = testDir ++ fname
+fileOut fname = fname ++ ".out"
+
+writeAndReadManySmallFiles :: Host -> Port -> IO ()
+writeAndReadManySmallFiles h p = testWriteAndRead h p smallFiles
 
 asyncTestWriteAndRead :: Host -> Port -> [String] -> IO ()
 asyncTestWriteAndRead host port fps = do
@@ -64,16 +63,29 @@ asyncTestWriteAndRead host port fps = do
 
 testManyWrites :: Host -> Port -> [String] -> IO ()
 testManyWrites host port fps = do
-  let fileNums = [0 .. testFileCount - 1]
   mapM_ (testWrite host port) fps
 
-testWrite :: Host -> Port -> String -> IO ()
-testWrite host port fp = do
+writeManySmallFiles :: Host -> Port -> IO ()
+writeManySmallFiles h p = testManyWrites h p smallFiles
+
+testManyWrites :: Host -> Port -> [FileName] -> IO ()
+testManyWrites host port fnames = do
+  mapM_ (testWrite host port) fnames
+
+testWrite :: Host -> Port -> FileName -> IO ()
+testWrite host port fName = do
+  h <- connectTo host (PortNumber $ fromIntegral $ read port)
+  hSetBuffering h LineBuffering
+
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h LineBuffering
 
   putStrLn $ "writing " ++ fp ++ " -> " ++ fp
-  writeFileReq host h fp fp
+  let
+    fIn = getPath fName
+    fOut = fileOut fName
+  putStrLn $ "writing " ++ fIn ++ " -> " ++ fOut
+  writeFileReq host h fIn fOut
 
   hClose h
 
@@ -83,43 +95,16 @@ testRead host port fp = do
   hSetBuffering h LineBuffering
 
   let filename = "file" ++ fp ++ ".out"
-  putStrLn $ "read " ++ fp
+  putStrLn $ "read " ++ fName
   file <- readFileReq host h fp
   writeToDisk filename file
 
   hClose h
 
-testWriteAndRead :: String -> String -> [String] -> IO ()
-testWriteAndRead host port fps = do
-  let fileNums = [0 .. testFileCount - 1]
-  mapM_ (testWrite host port) fps
-
-  mapM_ (testRead host port) fps
-
-createTestDir :: IO ()
-createTestDir = do
-  exists <- doesDirectoryExist testDir
-  case exists of
-    True  -> removeDirectoryRecursive testDir
-    False -> return ()
-  createDirectory testDir
-
-generateFiles :: [String]
-generateFiles = go ints
-  where ints = randoms (mkStdGen 0) :: [Int]
-        go as = let (file, ys) = generateFile as
-                in  file : go ys
-
-generateFile :: Show a => [a] -> (String, [a])
-generateFile as = go (100000 :: Int) as ""
-  where go 0 as acc = (acc, as)
-        go n as acc = go (n-1) as' (line ++ "\n"++ acc)
-          where (line, as') = generateLine as
-
-generateLine :: Show a => [a] -> (String, [a])
-generateLine as = (text, ys)
-  where (xs,ys) = splitAt 10 as
-        text = concatMap ((' ':) . show) xs
+testWriteAndRead :: Host -> Port -> [FileName] -> IO ()
+testWriteAndRead host port fNames = do
+  mapM_ (testWrite host port) fNames
+  mapM_ (testRead host port) (map fileOut fNames)
 
 
 writeToDisk :: FilePath -> Maybe FileData -> IO ()
