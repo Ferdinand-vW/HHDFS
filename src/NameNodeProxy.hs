@@ -1,5 +1,5 @@
 module NameNodeProxy where
-
+{-
 import Network
 import Control.Distributed.Process hiding (handleMessage)
 import qualified Data.ByteString.Char8 as B
@@ -18,7 +18,7 @@ namenodeproxy socket pid = forever $ do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   liftIO $ hSetBuffering h LineBuffering
-  liftIO $ hSetBinaryMode h True
+  --liftIO $ hSetBinaryMode h True
   say $ "client connected"
   msg <- liftIO $ B.hGetLine h
   say $ show $ (fromByteString msg :: ClientToNameNode)
@@ -48,4 +48,4 @@ handleMessage (Write fp bc) h pid = do
   send pid (WriteP fp bc sendport)
   resp <- receiveChan receiveport
   say $ show resp
-  liftIO $ B.hPut h $ toByteString $ WriteAddress resp
+  liftIO $ B.hPut h $ toByteString $ WriteAddress resp-}

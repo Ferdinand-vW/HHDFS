@@ -55,8 +55,8 @@ readBlocks = do
   unless fileExist $ writeDataNodeBlocks []
   readDataNodeBlocks
 
-dataNode :: Port -> ProcessId -> Process ()
-dataNode port nnid = do
+dataNode :: ProcessId -> Process ()
+dataNode nnid = do
 
   pid <- getSelfPid
 
@@ -76,14 +76,13 @@ dataNode port nnid = do
   tvarbids <- liftIO $ newTVarIO bids
 
   -- Setup a port for the proxy
-  let port' = show $ 1 + read port
 
   -- Initialize DataNode
   let dn = DataNode { dnId=dnId , blockIds=tvarbids, procChan=pChan}
 
   -- spawn the main dataNode process
-  pid' <- spawnLocal $ handleMessages nnid dn
-  send nnid $ HandShake pid' dnId bids port'
+  --pid' <- spawnLocal $ handleMessages nnid dn
+  send nnid $ HandShake pid dnId bids
 
   --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
   spawnLocal $ sendBlockReports nnid dn
@@ -94,39 +93,45 @@ dataNode port nnid = do
    -- spawn local proxy to execute process and IO actions
   spawnLocal $ spawnProcListener dn
 
-  handleProxyMessages nnid dn
+  handleMessages nnid dn
 
 handleMessages :: ProcessId -> DataNode -> Process ()
 handleMessages nnid dn@DataNode{..} = forever $ do
-  msg <- expect :: Process IntraNetwork
+  msg <- expect :: Process CDNReq
   spawnLocal $ 
     case msg of
-      Repl bid pids -> do
+      CDNRep bid pids -> do
         file <- liftIO $ B.readFile (getFileName bid)
-        unless (null pids) (
+        mapM_ (\pid -> send pid (CDNWrite bid file)) pids
+        {-unless (null pids) (
           liftIO $ atomically $ do
             --writeIOChan dn $ say $ "received repl request to " ++ show pids
             sendSTM dn (head pids) (WriteFile bid file (tail pids))
             --writeIOChan dn $ say $ "requeste forwarded"
-          )
-      WriteFile bid fdata pids -> do
+          )-}
+      CDNWrite bid fdata -> do
         --say $ "received request to replcate block" ++ show bid
         liftIO $ B.writeFile (getFileName bid) fdata
         liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-        unless (null pids) (
-          liftIO $ atomically $ do
-            --writeIOChan dn $ say $ "copying block to " ++ show (head pids)
-            sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
-          )
+      {-unless (null pids) (
+        liftIO $ atomically $ do
+          --writeIOChan dn $ say $ "copying block to " ++ show (head pids)
+          sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
+        )-}
+      CDNRead bid sendport -> do
+        file <- liftIO $ B.readFile (getFileName bid)
+        sendChan sendport file
 
 
-handleProxyMessages :: ProcessId -> DataNode -> Process ()
+
+{-handleProxyMessages :: ProcessId -> DataNode -> Process ()
 handleProxyMessages nnid dn@DataNode{..} =
   forever $ do
     msg <- expect :: Process ProxyToDataNode
     spawnLocal $
       case msg of
         CDNWriteP bid -> do
+          say $ "add " ++ show bid ++ " to blockids on this node"
           liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         CDNDeleteP bid -> do
           let fileName = getFileName bid
@@ -135,10 +140,11 @@ handleProxyMessages nnid dn@DataNode{..} =
             liftIO $ atomically $ do
               writeIOChan dn (liftIO $ removeFile (getFileName bid))
               modifyTVar blockIds $ \xs -> filter (/=bid) xs
-            )
+            )-}
 
 sendBlockReports :: ProcessId -> DataNode -> Process ()
 sendBlockReports nnid dn@DataNode{..} = forever $ do
+    say $ "try to send a blockreport"
     bids <- liftIO $ readTVarIO blockIds
     liftIO $ threadDelay 20000
     say $ show bids

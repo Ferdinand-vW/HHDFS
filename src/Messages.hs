@@ -34,27 +34,32 @@ data HandShake = HandShake
   { dataNodePid    :: ProcessId
   , dataNodeUid    :: Int
   , dataNodeBlocks :: [BlockId]
-  , proxyPort      :: Port
   }
   | WhoAmI (SendPort DataNodeId)
   deriving (Typeable, Generic)
 
-data ProxyToNameNode = ListFilesP (SendPort (ClientRes [FilePath]))
+data ClientReq = ListFiles (SendPort (ClientRes [FilePath]))
+              | Read FilePath (SendPort (ClientRes [RemotePosition]))
+              | Write FilePath BlockCount (SendPort (ClientRes [RemotePosition]))
+              | Shutdown
+  deriving (Typeable, Generic)
+
+{-data ProxyToNameNode = ListFilesP (SendPort (ClientRes [FilePath]))
                     | ReadP FilePath (SendPort (ClientRes [RemoteAddress]))
                     | WriteP FilePath BlockCount (SendPort (ClientRes [RemoteAddress]))
                     | Shutdown
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic)-}
 
-data ClientToNameNode = ListFiles
+{-data ClientToNameNode = ListFiles
                       | Read FilePath
                       | Write FilePath BlockCount
-  deriving (Typeable, Generic, Show)
+  deriving (Typeable, Generic, Show)-}
 
-data ProxyToClient = FilePaths (ClientRes [FilePath])
+{-data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | ReadAddress (ClientRes [RemoteAddress])
                    | WriteAddress (ClientRes [RemoteAddress])
                    | FileBlock FileData
-  deriving (Typeable, Generic,Show)
+  deriving (Typeable, Generic,Show)-}
 
 
 type ClientRes a = Either ClientError a
@@ -64,30 +69,34 @@ data ClientError = InvalidPathError
                  | InconsistentNetwork
   deriving (Typeable, Generic, Show)
 
-data ProxyToDataNode = CDNWriteP BlockId
+{-data ProxyToDataNode = CDNWriteP BlockId
                      | CDNDeleteP BlockId
+  deriving (Typeable, Generic, Show)-}
+
+data CDNReq = CDNRead BlockId (SendPort FileData)
+            | CDNWrite BlockId FileData
+            | CDNDelete BlockId
+            | CDNRep BlockId [ProcessId]
   deriving (Typeable, Generic, Show)
 
-data ClientToDataNode = CDNRead BlockId
-                      | CDNWrite BlockId
-                      | CDNDelete BlockId
-  deriving (Typeable, Generic, Show)
-
-data IntraNetwork = Repl BlockId [ProcessId]
+{-data IntraNetwork = Repl BlockId [ProcessId]
                   | WriteFile BlockId FileData [ProcessId]
-  deriving (Typeable, Generic, Show)
+  deriving (Typeable, Generic, Show)-}
 
 data BlockReport = BlockReport DataNodeId [BlockId]
   deriving (Typeable, Generic)
 
-instance Binary ProxyToNameNode
+{-instance Binary ProxyToNameNode
 instance Binary ProxyToClient
-instance Binary ProxyToDataNode
+instance Binary ProxyToDataNode-}
 
-instance Binary ClientToNameNode
-instance Binary ClientToDataNode
+{-instance Binary ClientToNameNode
+instance Binary ClientToDataNode-}
 
-instance Binary IntraNetwork
+instance Binary ClientReq
+instance Binary CDNReq
+
+{-instance Binary IntraNetwork-}
 instance Binary HandShake
 instance Binary ClientError
 instance Binary BlockReport

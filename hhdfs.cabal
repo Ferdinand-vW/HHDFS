@@ -24,6 +24,7 @@ executable hhdfs
                      , stm
                      , distributed-process
                      , distributed-process-simplelocalnet
+                     , distributed-process-async
                      , network-transport-tcp
                      , network-transport
                      , containers

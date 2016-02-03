@@ -1,5 +1,5 @@
 module DataNodeProxy where
-
+{-}
 import Network
 import Control.Distributed.Process hiding (handleMessage)
 import qualified Data.ByteString.Char8 as B
@@ -20,9 +20,9 @@ datanodeproxy socket pid = forever $ do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   liftIO $ hSetBuffering h NoBuffering
-  liftIO $ hSetBinaryMode h True
+  --liftIO $ hSetBinaryMode h No
   msg <- liftIO $ B.hGetLine h
-
+  say $ show (fromByteString msg :: ClientToDataNode)
   handleMessage (fromByteString msg) h pid
 
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
@@ -37,8 +37,11 @@ handleMessage (CDNWrite bid) h pid = do
   unless (bid /= 10) $ say $ "received blockid " ++ show bid
   unless (bid == 10) $ say $ "received other blockid " ++ show bid
   fd <- liftIO $ B.hGetContents h
+  say $ "read from handle"
   liftIO $ B.writeFile (getFileName bid) fd
+  say $ "written to file"
   send pid (CDNWriteP bid)
+  say $ "send to datanode"
 
 
 handleMessage (CDNDelete bid) h pid = do
@@ -47,3 +50,4 @@ handleMessage (CDNDelete bid) h pid = do
 
 getFileName :: BlockId -> FilePath
 getFileName bid = dnDataDir ++ show bid ++ ".dat"
+-}

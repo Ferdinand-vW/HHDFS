@@ -11,7 +11,7 @@ import System.FilePath (takeFileName)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import System.Clock
-import Control.Concurrent.Async
+import Control.Distributed.Process.Async
 
 import Messages (FileData, FileName, Host, Port)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
@@ -27,72 +27,66 @@ bigFiles = ["bigfile1", "bigfile2", "bigfile3", "bigfile4"]
 testDir :: String
 testDir = "./test_files/"
 
-testClient :: String -> String -> IO ()
-testClient host port = do
-  putStrLn "Starting tests..."
+testClient :: ProcessId -> Process ()
+testClient pid = do
+  liftIO $ putStrLn "Starting tests..."
 
-  before <- getTime Realtime
-  writeManySmallFiles host port
-  after <- getTime Realtime
-  print $ diffTimeSpec after before
-  _ <- getLine
+  before <- liftIO $ getTime Realtime
+  writeManySmallFiles pid
+  after <- liftIO $ getTime Realtime
+  liftIO $ print $ diffTimeSpec after before
+  _ <- liftIO $ getLine
 
-  before <- getTime Realtime
-  writeAndReadManySmallFiles host port
-  after <- getTime Realtime
-  print $ diffTimeSpec after before
-  _ <- getLine
+  before <- liftIO $ getTime Realtime
+  writeAndReadManySmallFiles pid
+  after <- liftIO $ getTime Realtime
+  liftIO $ print $ diffTimeSpec after before
+  _ <- liftIO $ getLine
 
-  before <- getTime Realtime
-  writeAndReadManyBigFiles host port
-  after <- getTime Realtime
-  print $ diffTimeSpec after before
+  before <- liftIO $ getTime Realtime
+  writeAndReadManyBigFiles pid
+  after <- liftIO $ getTime Realtime
+  liftIO $ print $ diffTimeSpec after before
   return ()
 
 getPath fname = testDir ++ fname
 fileOut fname = fname ++ ".out"
 
-writeAndReadManySmallFiles :: Host -> Port -> IO [()]
-writeAndReadManySmallFiles h p = testWriteAndRead h p smallFiles
+writeAndReadManySmallFiles :: ProcessId -> Process ()
+writeAndReadManySmallFiles pid = testWriteAndRead pid smallFiles
 
-writeAndReadManyBigFiles :: Host -> Port -> IO [()]
-writeAndReadManyBigFiles h p = testWriteAndRead h p bigFiles
+writeAndReadManyBigFiles :: ProcessId -> Process ()
+writeAndReadManyBigFiles pid = testWriteAndRead pid bigFiles
 
-writeManySmallFiles :: Host -> Port -> IO [()]
-writeManySmallFiles h p = testManyWrites h p smallFiles
+writeManySmallFiles :: ProcessId -> Process ()
+writeManySmallFiles pid = testManyWrites pid smallFiles
 
-testManyWrites :: Host -> Port -> [FileName] -> IO [()]
-testManyWrites host port fnames = mapConcurrently (testWrite host port) fnames
+testManyWrites :: ProcessId -> [FileName] -> Process ()
+testManyWrites pid fnames = do
+                  mapConcurrently (testWrite pid) fnames
 
-testWriteAndRead :: Host -> Port -> [FileName] -> IO [()]
-testWriteAndRead host port fNames = do
-  mapConcurrently (testWrite host port) fNames
-  mapConcurrently (testRead host port) (map fileOut fNames)
+testWriteAndRead :: ProcessId -> [FileName] -> Process ()
+testWriteAndRead pid fNames = do
+  mapConcurrently (testWrite pid) fNames
+  mapConcurrently (testRead pid) (map fileOut fNames)
 
-testWrite :: Host -> Port -> FileName -> IO ()
-testWrite host port fName = do
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
-  putStrLn $ "writing " ++ fName ++ " -> " ++ fName
+testWrite :: ProcessId -> FileName -> Process ()
+testWrite pid fName = do
+  liftIO $ putStrLn $ "writing " ++ fName ++ " -> " ++ fName
   let
     fIn = getPath fName
     fOut = fileOut fName
-  putStrLn $ "writing " ++ fIn ++ " -> " ++ fOut
-  writeFileReq host h fIn fOut
+  liftIO $ putStrLn $ "writing " ++ fIn ++ " -> " ++ fOut
+  writeFileReq pid fIn fOut
 
-  hClose h
 
-testRead :: Host -> Port -> String -> IO ()
-testRead host port fName = do
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
-
+testRead :: ProcessId -> String -> Process ()
+testRead pid fName = do
   let filename = "file" ++ fName ++ ".out"
-  putStrLn $ "read " ++ fName
-  file <- readFileReq host h fName
-  writeToDisk filename file
-
-  hClose h
+  liftIO $ putStrLn $ "read " ++ fName
+  file <- readFileReq pid fName
+  liftIO $ putStrLn "was able to read"
+  liftIO $ writeToDisk filename file
 
 writeToDisk :: FilePath -> Maybe FileData -> IO ()
 writeToDisk fpath mfdata = case mfdata of
@@ -100,3 +94,8 @@ writeToDisk fpath mfdata = case mfdata of
   Just fdata -> do
       createDirectoryIfMissing False "./local"
       B.writeFile ("./local/" ++ takeFileName fpath) fdata --Had to add L.toStrict
+
+mapConcurrently :: (a -> Process ()) -> [a] -> Process ()
+mapConcurrently f xs = do
+        asyncs <- mapM (async . task . f) xs
+        mapM_ wait asyncs

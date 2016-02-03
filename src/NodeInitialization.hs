@@ -27,21 +27,21 @@ type Addr = String
 
     
 
-setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
-setupClient p host port = do
-  --First we try to connect to the proxy server
-  p host port
-    {-addrinfos <- getAddrInfo Nothing (Just phost) (Just pport)
-    let proxyAddr = head addrinfos
-    sock <- socket (addrFamily proxyAddr) Stream defaultProtocol
-    setSocketOption sock KeepAlive 1
-    connect sock (addrAddress proxyAddr)
-    msg <- recv sock 1024
-    let Response pid = decode $ L.fromStrict msg-}
-  return ()
-  --runProcess node $ p pid
+setupClient :: (ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
+setupClient p host port addr = do
+    Right t <- createTransport host port defaultTCPParameters --setup transport layer for the node
+    node <- newLocalNode t initRemoteTable --create a new localnode using the transport layer
+    let nnAddr = EndPointAddress $ B.pack addr
+        nodeid = NodeId nnAddr --Create a NodeId for the NameNode
+    runProcess node $ do --We start a process on the node
+      whereisRemoteAsync nodeid "NameNodePid" --See if we can find the NameNode and if so get his ProcessId
+      WhereIsReply _ mpid <- expect :: Process WhereIsReply
+      case mpid of
+          Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
+          Just pid -> say "connected to namenode" >> do
+            p pid --Continue with the given Process and pass it the NameNode ProcessId
 
-setupNode :: (Port -> ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
+setupNode :: (ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
 setupNode p host port addr = do
     Right t <- createTransport host port defaultTCPParameters --setup transport layer for the node
     node <- newLocalNode t initRemoteTable --create a new localnode using the transport layer
@@ -52,10 +52,8 @@ setupNode p host port addr = do
       WhereIsReply _ mpid <- expect :: Process WhereIsReply
       case mpid of
           Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
-          Just npid -> say "connected to namenode" >> do
-            pid <- getSelfPid
-            spawnLocal $ waitForConnections host port pid
-            p port npid --Continue with the given Process and pass it the NameNode ProcessId
+          Just pid -> say "connected to namenode" >> do
+            p pid --Continue with the given Process and pass it the NameNode ProcessId
         
 setupNameNode :: Process () -> Host -> Port -> IO ()
 setupNameNode p host port = do
@@ -66,19 +64,17 @@ setupNameNode p host port = do
         node <- newLocalNode t initRemoteTable
         runProcess node $ do
             pid <- getSelfPid --Dynamically register the NameNode's ProcessId
-            spawnLocal $ listenForClients host port pid
-            
             say "Started process"
             register "NameNodePid" pid
             p
 
-listenForClients :: Host -> Port -> ProcessId -> Process ()
+{-listenForClients :: Host -> Port -> ProcessId -> Process ()
 listenForClients host port pid = do
   socket <- liftIO $ listenOn (PortNumber $ fromIntegral $ 1 + read port)
-  namenodeproxy socket pid
+  --namenodeproxy socket pid
 
 waitForConnections :: Host -> Port -> ProcessId -> Process ()
 waitForConnections host port pid = do
   say "Start listening"
   socket <- liftIO $ listenOn (PortNumber $ fromIntegral $ 1 + read port)
-  datanodeproxy socket pid
+  --datanodeproxy socket pid-}
