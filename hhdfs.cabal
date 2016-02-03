@@ -34,5 +34,7 @@ executable hhdfs
                      , network
                      , random
                      , criterion
+                     , clock
+                     , async
   hs-source-dirs:      src
   default-language:    Haskell2010
