@@ -9,7 +9,7 @@ import            GHC.Conc
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (unless, forever, join, void)
+import            Control.Monad (unless, forever, join, void, forM)
 import qualified  Data.Set as S
 import qualified  Data.List as L
 import            Data.Char (ord)
@@ -167,8 +167,10 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       idPidMap <- readTVar dnIdPidMap
 
       -- We could insert some retries here instead of the fromJust
-      let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union bMap rMap, bid)) bids
-      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrs, bid)) mpids
+      mpids <- forM bids $ pickPids bMap
+      let mpidsnbids = zip mpids bids
+      --let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid bMap, bid)) bids
+      let res = map (\(dnodeIds, bid) -> (fromJust $ M.lookup (S.elemAt 0 dnodeIds) dnIdAddrs, bid)) mpidsnbids
       writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
 
@@ -184,6 +186,16 @@ handleClients nameNode@NameNode{..} Shutdown = do
   writeIOChan nameNode terminate
 
 
+pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
+pickPids bMap bid =
+  case M.lookup bid bMap of
+    Nothing -> retry
+    Just a -> return a
+
+
+hopefully a = case a of
+  Nothing -> retry
+  Just a -> return a
 --Whenever we receive a blockreport from a datanode we will have to update
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> STM ()

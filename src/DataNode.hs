@@ -99,7 +99,7 @@ dataNode port nnid = do
 handleMessages :: ProcessId -> DataNode -> Process ()
 handleMessages nnid dn@DataNode{..} = forever $ do
   msg <- expect :: Process IntraNetwork
-  spawnLocal $  
+  spawnLocal $
     case msg of
       Repl bid pids -> do
         file <- liftIO $ L.readFile (getFileName bid)
@@ -123,7 +123,7 @@ handleProxyMessages :: ProcessId -> DataNode -> Process ()
 handleProxyMessages nnid dn@DataNode{..} =
   forever $ do
     msg <- expect :: Process ProxyToDataNode
-    spawnLocal $ 
+    spawnLocal $
       case msg of
         CDNWriteP bid -> do
           say "received write from proxy"
@@ -140,7 +140,6 @@ handleProxyMessages nnid dn@DataNode{..} =
 sendBlockReports :: ProcessId -> DataNode -> Process ()
 sendBlockReports nnid dn@DataNode{..} = forever $ do
     bids <- liftIO $ readTVarIO blockIds
-    liftIO $ threadDelay 20000
     checkStatus bids
   where
     checkStatus oldbids = liftIO $ atomically $ do
