@@ -23,7 +23,7 @@ handleClient h pid = do
   liftIO $ hSetBinaryMode h True
   say "received connection"
   say $ "wait for message"
-  msg <- liftIO $ L.hGetContents h
+  msg <- liftIO $ B.hGetLine h
   say $ "received msg"
 
   handleMessage (fromByteString msg) h pid
@@ -31,13 +31,15 @@ handleClient h pid = do
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
   say "received read"
-  file <- liftIO $ L.readFile (getFileName bid)
-  liftIO $ L.hPutStrLn h $ toByteString $ FileBlock file
+  file <- liftIO $ B.readFile (getFileName bid)
+  liftIO $ B.hPut h $ toByteString $ FileBlock file
+  liftIO $ hClose h
   say $ "send fileblock"
 
-handleMessage (CDNWrite bid fd) h pid = do
+handleMessage (CDNWrite bid) h pid = do
   say $ "received write request"
-  liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
+  fd <- liftIO $ B.hGetContents h
+  liftIO $ B.writeFile (getFileName bid) fd
   send pid (CDNWriteP bid)
 
 

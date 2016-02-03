@@ -22,8 +22,8 @@ import Messages
 listFilesReq :: Handle -> IO [FilePath]
 listFilesReq h = do
   let lf = toByteString ListFiles
-  L.hPutStrLn h lf
-  msg <- L.hGetContents h
+  B.hPutStrLn h lf
+  msg <- B.hGetContents h
   let FilePaths xs = fromByteString msg
   case xs of
     Left e -> error $ show e
@@ -31,12 +31,12 @@ listFilesReq h = do
 
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
 writeFileReq host h localFile remotePath = do
-  fdata <- L.readFile localFile
+  fdata <- B.readFile localFile
 
   flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
   let blockCount = 1 + fromIntegral (flength `div` blockSize)
-  L.hPutStrLn h $ toByteString $ Write remotePath blockCount
-  resp <- L.hGetContents h
+  B.hPutStrLn h $ toByteString $ Write remotePath blockCount
+  resp <- B.hGetContents h
   let WriteAddress res = fromByteString resp
       writeBlock (port,bid) fblock = do
         putStrLn "Write a block"
@@ -45,7 +45,8 @@ writeFileReq host h localFile remotePath = do
         hSetBinaryMode handle True
 
         putStrLn "Was able to connect"
-        L.hPut handle (toByteString $ CDNWrite bid fblock)
+        B.hPutStrLn handle (toByteString $ CDNWrite bid)
+        B.hPut handle fblock
         putStrLn "Send a message"
         hClose handle
   putStrLn $ "Received write address: " ++ show res
@@ -56,9 +57,9 @@ writeFileReq host h localFile remotePath = do
 readFileReq :: Host -> Handle -> FilePath -> IO (Maybe FileData)
 readFileReq host h fpath = do
   let rf = toByteString $ Read fpath
-  L.hPutStrLn h rf
+  B.hPutStrLn h rf
 
-  resp <- L.hGetContents h
+  resp <- B.hGetContents h
   let ReadAddress mexists = fromByteString resp
       readBlock bs (port,bid) = do
         putStrLn "Try to connect to datanode"
@@ -67,20 +68,20 @@ readFileReq host h fpath = do
         hSetBinaryMode handle True
         open <- hIsOpen handle
         putStrLn "Connected to datanode"
-        L.hPutStrLn handle (toByteString $ CDNRead bid)
+        B.hPutStrLn handle (toByteString $ CDNRead bid)
         putStrLn "Send read command"
-        fdata <- L.hGetContents handle
+        fdata <- B.hGetContents handle
         putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
-        return $ L.append bs fd
+        return $ B.append bs fd
   putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
-    Right addrs -> Just <$> foldM readBlock L.empty addrs
+    Right addrs -> Just <$> foldM readBlock B.empty addrs
 
-chunksOf :: Int -> L.ByteString -> [L.ByteString]
-chunksOf n s = case L.splitAt (fromIntegral n) s of
-  (a,b) | L.null a  -> []
+chunksOf :: Int -> B.ByteString -> [B.ByteString]
+chunksOf n s = case B.splitAt (fromIntegral n) s of
+  (a,b) | B.null a  -> []
         | otherwise -> a : chunksOf n b
 
 shutdownReq :: Handle -> IO ()

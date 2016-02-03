@@ -102,7 +102,7 @@ handleMessages nnid dn@DataNode{..} = forever $ do
   spawnLocal $ 
     case msg of
       Repl bid pids -> do
-        file <- liftIO $ L.readFile (getFileName bid)
+        file <- liftIO $ B.readFile (getFileName bid)
         unless (null pids) (
           liftIO $ atomically $ do
             writeIOChan dn $ say $ "received repl request to " ++ show pids
@@ -111,7 +111,7 @@ handleMessages nnid dn@DataNode{..} = forever $ do
           )
       WriteFile bid fdata pids -> do
         say $ "received request to replcate block" ++ show bid
-        liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
+        liftIO $ B.writeFile (getFileName bid) fdata
         liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         unless (null pids) (
           liftIO $ atomically $ do
