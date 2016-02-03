@@ -9,7 +9,7 @@ import            GHC.Conc
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (unless, forever, join, void)
+import            Control.Monad (unless, forever, join, void,sequence)
 import qualified  Data.Set as S
 import qualified  Data.List as L
 import            Data.Char (ord)
@@ -167,8 +167,12 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       idPidMap <- readTVar dnIdPidMap
 
       -- We could insert some retries here instead of the fromJust
-      let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid $ M.unionWith S.union bMap rMap, bid)) bids
-      let res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrs, bid)) mpids
+      mpids <- mapM (\bid -> do case M.lookup bid $ M.unionWith S.union bMap rMap of
+                                                    Just k -> return $ (head $ S.toList k, bid)
+                                                    Nothing -> retry) bids
+      let res = map (\(dnodeId, bid) -> (case M.lookup dnodeId dnIdAddrs of
+                                            Just k -> k
+                                            Nothing -> error "lookup dnId dnIdAddrs", bid)) mpids
       writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
 

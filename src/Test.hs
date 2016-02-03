@@ -9,6 +9,7 @@ import Control.Monad (zipWithM_)
 import System.FilePath (takeFileName)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
+import Criterion.Main
 
 import Messages (FileData)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
@@ -24,23 +25,34 @@ testClient host port = do
   createTestDir
   let files = zip generateFiles [0..]
 
-      getFilename n = testDir ++ "/file" ++ show n
-      fileIn n  = getFilename n ++ ".in"
-      fileOut n = getFilename n ++ ".out"
+      
 
   putStrLn "Generating files..."
   mapM_ (\(f,n) -> writeFile (fileIn n) f) (take testFileCount files)
 
   putStrLn "Starting tests..."
+
+  defaultMain [
+    bgroup "test1" [ bench "1" $ nfIO $ computation host port
+                   , bench "2" $ nfIO $ computation host port
+                   ]
+              ]
+ 
+getFilename n = testDir ++ "/file" ++ show n
+fileIn n  = getFilename n ++ ".in"
+fileOut n = getFilename n ++ ".out"         
+
+computation :: String -> String -> IO ()
+computation host port = do
   let fileNums = [0 .. testFileCount - 1]
       testFile n = do
-        h <- connectTo host (PortNumber $ fromIntegral $ read port)
-        hSetBuffering h LineBuffering
+                h <- connectTo host (PortNumber $ fromIntegral $ read port)
+                hSetBuffering h LineBuffering
 
-        putStrLn $ "write " ++ (fileIn n) ++ " " ++ (fileOut n)
-        writeFileReq host h (fileIn n) (fileOut n)
+                putStrLn $ "write " ++ (fileIn n) ++ " " ++ (fileOut n)
+                writeFileReq host h (fileIn n) (fileOut n)
 
-        hClose h
+                hClose h
   mapM_ testFile fileNums
 
   let readBack n = do
