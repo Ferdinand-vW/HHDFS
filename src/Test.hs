@@ -73,9 +73,6 @@ testWrite host port fName = do
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h LineBuffering
 
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
-
   putStrLn $ "writing " ++ fName ++ " -> " ++ fName
   let
     fIn = getPath fName

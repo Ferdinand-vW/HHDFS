@@ -65,7 +65,7 @@ mkNameNode = do
   bMap <- newTVar M.empty
   rMap <- newTVar M.empty
   blockId <- newTVar oldBlockId
-  rVar <- newTVar $ mkStdGen 12
+  rVar <- newTVar $ mkStdGen 0
 
   return NameNode { dataNodes=dNodes
                 , fsImage=fsImg
@@ -228,7 +228,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   writeTVar repMap newRepMap
   mapM_ (\(k,a) -> do
     let dataNodesPids = filter (/=pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
-    dnIds <- selectRandomDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
+    dnIds <- selectRandomTakeDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
     writeIOChan nameNode $ say $ "Chosen dnIds " ++ (show dnIds)
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
@@ -250,22 +250,38 @@ sendChanSTM NameNode{..} chan msg = writeTChan procChan (sendChan chan msg)
 writeIOChan :: NameNode -> Process () -> STM ()
 writeIOChan NameNode{..} = writeTChan procChan
 
-selectRandomDataNodes :: Eq a => NameNode -> Int -> [a] -> STM [a]
+selectRandomDataNodes :: (Show a,Eq a) => NameNode -> Int -> [a] -> STM [a]
 selectRandomDataNodes nn@NameNode{..} n datanodes = do
  g <- readTVar randomVar
  let (g',r) = randomValues g n datanodes
  writeTVar randomVar g'
  return r
 
+selectRandomTakeDataNodes :: (Show a,Eq a) => NameNode -> Int -> [a] -> STM [a]
+selectRandomTakeDataNodes nn@NameNode{..} n datanodes = do
+ g <- readTVar randomVar
+ let (g',r) = randomTakeValues g n datanodes
+ writeTVar randomVar g'
+ return r
 
-randomValues :: Eq a => StdGen -> Int -> [a] -> (StdGen,[a])
+randomTakeValues :: Eq a => StdGen -> Int -> [a] -> (StdGen,[a])
+randomTakeValues gen _ [] = (gen,[])
+randomTakeValues gen 0 _ = (gen,[])
+randomTakeValues gen n xs =
+  let (a,g) = randomR (0,length xs - 1) gen
+      val = xs !! a
+      ([x],ys) = L.partition (==val) xs
+      (g',zs) = randomTakeValues g (n - 1) ys
+  in (g',x:zs)
+
+randomValues :: (Show a,Eq a) => StdGen -> Int -> [a] -> (StdGen,[a])
+randomValues gen _ [] = (gen,[])
 randomValues gen 0 _ = (gen,[])
 randomValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val  = xs !! a
-      ([x],ys) = L.partition (==val) xs
-      (g',zs) = randomValues g (n - 1) ys
-  in (g',x:zs)
+      (g',ys) = randomValues g (n - 1) xs
+  in (g',val:ys)
 
 flushFsImage :: NameNode -> IO ()
 flushFsImage NameNode{..} = do
