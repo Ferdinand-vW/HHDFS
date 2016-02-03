@@ -9,7 +9,7 @@ shutdownReq
 import Control.Distributed.Process
 
 import Data.Functor ((<$>))
-import Control.Monad (foldM, zipWithM_)
+import Control.Monad (foldM, zipWithM_,unless)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified System.IO as IO
@@ -39,15 +39,13 @@ writeFileReq host h localFile remotePath = do
   resp <- B.hGetContents h
   let WriteAddress res = fromByteString resp
       writeBlock (port,bid) fblock = do
-        putStrLn "Write a block"
+        unless (bid /= 10) $ putStrLn "Writing block id 10"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
         hSetBuffering handle NoBuffering
         hSetBinaryMode handle True
 
-        putStrLn "Was able to connect"
         B.hPutStrLn handle (toByteString $ CDNWrite bid)
         B.hPut handle fblock
-        putStrLn "Send a message"
         hClose handle
   putStrLn $ "Received write address: " ++ show res
   case res of
@@ -64,7 +62,7 @@ readFileReq host h fpath = do
       readBlock bs (port,bid) = do
         putStrLn "Try to connect to datanode"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
-        hSetBuffering handle NoBuffering
+        hSetBuffering handle LineBuffering
         hSetBinaryMode handle True
         open <- hIsOpen handle
         putStrLn "Connected to datanode"
@@ -72,8 +70,8 @@ readFileReq host h fpath = do
         putStrLn "Send read command"
         fdata <- B.hGetContents handle
         putStrLn "Received data"
-        let FileBlock fd = fromByteString fdata
-        return $ B.append bs fd
+        --let FileBlock fd = fromByteString fdata
+        return $ B.append bs fdata
   putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
@@ -81,7 +79,7 @@ readFileReq host h fpath = do
 
 chunksOf :: Int -> B.ByteString -> [B.ByteString]
 chunksOf n s = case B.splitAt (fromIntegral n) s of
-  (a,b) | B.null a  -> []
+  (a,b) | B.null a  -> [B.empty]
         | otherwise -> a : chunksOf n b
 
 shutdownReq :: Handle -> IO ()

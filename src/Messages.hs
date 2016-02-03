@@ -48,7 +48,7 @@ data ProxyToNameNode = ListFilesP (SendPort (ClientRes [FilePath]))
 data ClientToNameNode = ListFiles
                       | Read FilePath
                       | Write FilePath BlockCount
-  deriving (Typeable, Generic)
+  deriving (Typeable, Generic, Show)
 
 data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | ReadAddress (ClientRes [RemoteAddress])

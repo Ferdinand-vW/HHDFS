@@ -40,6 +40,7 @@ data NameNode = NameNode
   , repMap :: TVar BlockMap
   , procChan :: TChan (Process ())
   , blockIdCounter :: TVar Int
+  , dataNodeIdCounter :: TVar Int
   , randomVar :: TVar StdGen
   }
 
@@ -50,12 +51,14 @@ fsImageFile = nnDataDir ++ "fsImage.fs"
 dnMapFile = nnDataDir ++ "dn_map.map"
 blockMapFile = nnDataDir ++ "block_map.map"
 blockIdFile = nnDataDir ++ "blockId.id"
+dataNodeIdFile = nnDataDir ++ "dataNodeId.id"
 
 mkNameNode :: STM NameNode
 mkNameNode = do
   oldDnMap <- unsafeIOToSTM readDnMap
   oldFsImg <- unsafeIOToSTM readFsImage
   oldBlockId <- unsafeIOToSTM readBlockId
+  oldDataNodeId <- unsafeIOToSTM readDataNodeId
 
   pChan <- newTChan
   fsImg <- newTVar oldFsImg
@@ -65,6 +68,7 @@ mkNameNode = do
   bMap <- newTVar M.empty
   rMap <- newTVar M.empty
   blockId <- newTVar oldBlockId
+  dataNodeId <- newTVar oldDataNodeId
   rVar <- newTVar $ mkStdGen 0
 
   return NameNode { dataNodes=dNodes
@@ -75,6 +79,7 @@ mkNameNode = do
                 , repMap=rMap
                 , procChan=pChan
                 , blockIdCounter=blockId
+                , dataNodeIdCounter = dataNodeId
                 , randomVar=rVar }
 
 nameNode :: Process ()
@@ -113,13 +118,13 @@ handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
   writeTVar blockMap newBlockMap
   writeTVar dnIdAddrMap dnAddressMap
   modifyTVar' dataNodes (dnId:)
+  writeIOChan nameNode $ say $ show (dnId : dNodes)
 
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
-  idPidMap <- readTVar dnIdPidMap
-  sendChanSTM nameNode chan $ nextDnId (M.keys idPidMap)
-  where
-    nextDnId [] = 0
-    nextDnId a = maximum a + 1
+  dnIdCounter <- readTVar dataNodeIdCounter
+  modifyTVar dataNodeIdCounter (+1)
+  writeIOChan nameNode (liftIO $ flushDataNodeId $ dnIdCounter + 1)
+  sendChanSTM nameNode chan $ (dnIdCounter + 1)--nextDnId (M.keys idPidMap)
 
 handleClients :: NameNode -> ProxyToNameNode -> STM ()
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
@@ -169,12 +174,14 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       -- We could insert some retries here instead of the fromJust
       mpids <- mapM (\bid -> do case M.lookup bid $ M.unionWith S.union bMap rMap of
                                                     Just k -> return $ (head $ S.toList k, bid)
-                                                    Nothing -> retry) bids
+                                                    Nothing -> error $ show bMap ++ "   " ++ show rMap ++ "    " ++ show bid) bids
+      error "got here"
       let res = map (\(dnodeId, bid) -> (case M.lookup dnodeId dnIdAddrs of
                                             Just k -> k
                                             Nothing -> error "lookup dnId dnIdAddrs", bid)) mpids
       writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
+
 
 handleClients nameNode@NameNode{..} (ListFilesP chan) = do
   writeIOChan nameNode $ say "received Show req from client"
@@ -264,13 +271,15 @@ selectRandomTakeDataNodes nn@NameNode{..} n datanodes = do
  writeTVar randomVar g'
  return r
 
-randomTakeValues :: Eq a => StdGen -> Int -> [a] -> (StdGen,[a])
+randomTakeValues :: (Show a,Eq a) => StdGen -> Int -> [a] -> (StdGen,[a])
 randomTakeValues gen _ [] = (gen,[])
 randomTakeValues gen 0 _ = (gen,[])
 randomTakeValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val = xs !! a
-      ([x],ys) = L.partition (==val) xs
+      ([x],ys) = case L.partition (==val) xs of
+                    ([x],l) -> ([x],l)
+                    ps -> error $ "Errrorrr" ++ show ps ++ "  " ++ show val ++ "  " ++ show xs ++ "  " ++ show a
       (g',zs) = randomTakeValues g (n - 1) ys
   in (g',x:zs)
 
@@ -314,3 +323,14 @@ readBlockId = do
   fileExist <- liftIO $ doesFileExist blockIdFile
   unless fileExist $ liftIO $ flushBlockId 0
   decodeFile blockIdFile
+
+flushDataNodeId :: Int -> IO ()
+flushDataNodeId = encodeFile dataNodeIdFile
+
+readDataNodeId :: IO Int
+readDataNodeId = do
+  fileExist <- liftIO $ doesFileExist dataNodeIdFile
+  unless fileExist $ liftIO $ flushDataNodeId 0
+  decodeFile dataNodeIdFile
+
+

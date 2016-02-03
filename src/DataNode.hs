@@ -105,17 +105,17 @@ handleMessages nnid dn@DataNode{..} = forever $ do
         file <- liftIO $ B.readFile (getFileName bid)
         unless (null pids) (
           liftIO $ atomically $ do
-            writeIOChan dn $ say $ "received repl request to " ++ show pids
+            --writeIOChan dn $ say $ "received repl request to " ++ show pids
             sendSTM dn (head pids) (WriteFile bid file (tail pids))
-            writeIOChan dn $ say $ "requeste forwarded"
+            --writeIOChan dn $ say $ "requeste forwarded"
           )
       WriteFile bid fdata pids -> do
-        say $ "received request to replcate block" ++ show bid
+        --say $ "received request to replcate block" ++ show bid
         liftIO $ B.writeFile (getFileName bid) fdata
         liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         unless (null pids) (
           liftIO $ atomically $ do
-            writeIOChan dn $ say $ "copying block to " ++ show (head pids)
+            --writeIOChan dn $ say $ "copying block to " ++ show (head pids)
             sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
           )
 
@@ -127,7 +127,6 @@ handleProxyMessages nnid dn@DataNode{..} =
     spawnLocal $
       case msg of
         CDNWriteP bid -> do
-          say "received write from proxy"
           liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         CDNDeleteP bid -> do
           let fileName = getFileName bid
@@ -142,11 +141,13 @@ sendBlockReports :: ProcessId -> DataNode -> Process ()
 sendBlockReports nnid dn@DataNode{..} = forever $ do
     bids <- liftIO $ readTVarIO blockIds
     liftIO $ threadDelay 20000
+    say $ show bids
     checkStatus bids
   where
     checkStatus oldbids = liftIO $ atomically $ do
       newbids <- readNewBlockIds dn oldbids --Blocking call, waits for blockIds to be changed
       sendSTM dn nnid (BlockReport dnId newbids)
+
 
 writeBlockReports :: DataNode -> Process ()
 writeBlockReports dn@DataNode{..} = forever $ liftIO $ atomically $ do

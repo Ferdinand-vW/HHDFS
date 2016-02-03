@@ -17,9 +17,12 @@ namenodeproxy socket pid = forever $ do
 
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
-  liftIO $ hSetBuffering h NoBuffering
+  liftIO $ hSetBuffering h LineBuffering
+  liftIO $ hSetBinaryMode h True
   say $ "client connected"
   msg <- liftIO $ B.hGetLine h
+  say $ show $ (fromByteString msg :: ClientToNameNode)
+  say $ "received message"
   handleMessage (fromByteString msg) h pid
   liftIO $ hClose h
 
@@ -32,8 +35,11 @@ handleMessage ListFiles h pid  = do
 
 handleMessage (Read fp) h pid = do
   (sendport,receiveport) <- newChan
+  say $ "send message to namenode"
   send pid (ReadP fp sendport)
+  say $ "sent message to namenode"
   resp <- receiveChan receiveport
+  say $ "received response"
   say $ show resp
   liftIO $ B.hPut h $ toByteString $ ReadAddress resp
 
