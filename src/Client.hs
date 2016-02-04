@@ -14,7 +14,7 @@ import Data.Binary(encode,decode)
 import Control.Monad (forever,void)
 import Network
 
-import ClientAPI 
+import ClientAPI
 import Messages
 
 -- Example client
@@ -26,7 +26,7 @@ client host port = do
   hSetBuffering h LineBuffering
   void $ case words input of
           ["show"] -> do
-            putStrLn "test"
+            putStrLn "Contents:"
             fsimage <- listFilesReq h
             showFSImage fsimage
           ["write",localFile,remotePath] -> writeFileReq host h localFile remotePath >> putStrLn "read file" --Write a file onto the network
