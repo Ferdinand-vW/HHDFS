@@ -14,7 +14,7 @@ import System.Clock
 import Control.Concurrent.Async
 
 import Messages (FileData, FileName, Host, Port)
-import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
+import ClientAPI (listFilesReq,writeFileReq,readFileReq)
 
 
 smallFiles :: [String]
@@ -28,6 +28,8 @@ testDir = "./test_files/"
 
 testClient :: String -> String -> IO ()
 testClient host port = do
+  createDirectoryIfMissing False "./local"
+
   putStrLn "Starting tests..."
 
   before <- getTime Realtime
@@ -89,7 +91,7 @@ testRead host port fName = do
   let filename = "file" ++ fName ++ ".out"
   putStrLn $ "read " ++ fName
   file <- readFileReq host h fName
-  writeToDisk filename file
+  --writeToDisk filename file
 
   hClose h
 
@@ -97,5 +99,4 @@ writeToDisk :: FilePath -> Maybe FileData -> IO ()
 writeToDisk fpath mfdata = case mfdata of
   Nothing -> putStrLn "Could not find file on network"
   Just fdata -> do
-      createDirectoryIfMissing False "./local"
-      L.writeFile ("./local/" ++ takeFileName fpath) fdata
+      B.writeFile ("./local/" ++ takeFileName fpath) $ L.toStrict fdata
