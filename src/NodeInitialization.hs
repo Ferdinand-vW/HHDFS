@@ -26,12 +26,12 @@ import DataNodeProxy
 type Addr = String
     
 
+
 setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
 setupClient p host port = do
   --First we try to connect to the proxy server
   p host port
   return ()
-
 
 setupNode :: (Port -> ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
 setupNode p host port addr = do
@@ -44,11 +44,11 @@ setupNode p host port addr = do
       WhereIsReply _ mpid <- expect :: Process WhereIsReply
       case mpid of
           Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
-          Just npid -> say "connected to namenode" >> do
+          Just npid -> do
             pid <- getSelfPid
             spawnLocal $ waitForConnections host port pid
             p port npid --Continue with the given Process and pass it the NameNode ProcessId
-        
+
 setupNameNode :: Process () -> Host -> Port -> IO ()
 setupNameNode p host port = do
     et <- createTransport host port defaultTCPParameters
@@ -59,8 +59,7 @@ setupNameNode p host port = do
         runProcess node $ do
             pid <- getSelfPid --Dynamically register the NameNode's ProcessId
             spawnLocal $ listenForClients host port pid
-            
-            say "Started process"
+
             register "NameNodePid" pid
             p
 
@@ -71,6 +70,5 @@ listenForClients host port pid = do
 
 waitForConnections :: Host -> Port -> ProcessId -> Process ()
 waitForConnections host port pid = do
-  say "Start listening"
   socket <- liftIO $ listenOn (PortNumber $ fromIntegral $ 1 + read port)
   datanodeproxy socket pid

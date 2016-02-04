@@ -14,18 +14,15 @@ import Data.Binary(encode,decode)
 import Control.Monad (forever,void)
 import Network
 
-import ClientAPI {-(listFilesReq,writeFileReq,readFileReq, shutdownReq)-}
+import ClientAPI 
 import Messages
 
 -- Example client
 client :: Host -> Port -> IO ()
 client host port = do
-  putStrLn "Wait for input"
   input <- getLine --parse some input
 
-  putStrLn "Try to connect to namenode"
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  putStrLn "Connected to namenode"
   hSetBuffering h LineBuffering
   void $ case words input of
           ["show"] -> do
@@ -37,10 +34,8 @@ client host port = do
               mfdata <- readFileReq host h path --Retrieve the file
               writeToDisk path mfdata --Write file to diskk
           ["quit"] -> putStrLn "Closing program..." >> threadDelay 2000000 --Print a message and after 2 seconds quit
-          ["shutdown"] -> (putStrLn "Shutting down Network...") >> shutdownReq h
           _ -> (putStrLn "Input was not a valid command.")
   hClose h
-  putStrLn "Closed namenode handle"
   client host port
 
 
