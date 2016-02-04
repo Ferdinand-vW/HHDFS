@@ -21,7 +21,8 @@ smallFiles :: [String]
 smallFiles = ["mediumfile1","mediumfile2","mediumfile3","mediumfile4","mediumfile5"]
 
 bigFiles :: [String]
-bigFiles = ["bigfile1", "bigfile2", "bigfile3", "bigfile4"]
+bigFiles = [ "bigfile1", "bigfile2", "bigfile3", "bigfile4", "bigfile5", "bigfile6",
+             "bigfile7", "bigfile8", "bigfile9", "bigfile10", "bigfile11", "bigfile12"]
 
 testDir :: String
 testDir = "./test_files/"
@@ -91,12 +92,5 @@ testRead host port fName = do
   let filename = "file" ++ fName ++ ".out"
   putStrLn $ "read " ++ fName
   file <- readFileReq host h fName
-  --writeToDisk filename file
-
+  -- We do not account for the time taken to write a file to disk when running tests
   hClose h
-
-writeToDisk :: FilePath -> Maybe FileData -> IO ()
-writeToDisk fpath mfdata = case mfdata of
-  Nothing -> putStrLn "Could not find file on network"
-  Just fdata -> do
-      B.writeFile ("./local/" ++ takeFileName fpath) $ L.toStrict fdata
