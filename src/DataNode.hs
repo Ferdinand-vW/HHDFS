@@ -105,16 +105,13 @@ handleMessages nnid dn@DataNode{..} = forever $ do
         file <- liftIO $ L.readFile (getFileName bid)
         unless (null pids) (
           liftIO $ atomically $ do
-            writeIOChan dn $ say $ "received repl request to " ++ show pids
             sendSTM dn (head pids) (WriteFile bid file (tail pids))
           )
       WriteFile bid fdata pids -> do
         liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
         liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-        say "Received request to write block"
         unless (null pids) (
           liftIO $ atomically $ do
-            writeIOChan dn $ say $ "received request to replcate block" ++ show bid
             sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
           )
 
@@ -126,7 +123,6 @@ handleProxyMessages nnid dn@DataNode{..} =
     spawnLocal $
       case msg of
         CDNWriteP bid -> do
-          say "received write from proxy"
           liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         CDNDeleteP bid -> do
           let fileName = getFileName bid

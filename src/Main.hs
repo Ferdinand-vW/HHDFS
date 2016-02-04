@@ -6,7 +6,7 @@ import Client (client)
 import Test (testClient)
 import DataNode (dataNode)
 import NameNode (nameNode)
-import NodeInitialization (setupProxy, setupClient, setupNode, setupNameNode)
+import NodeInitialization (setupClient, setupNode, setupNameNode)
 
 main :: IO ()
 main = do

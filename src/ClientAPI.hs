@@ -39,16 +39,12 @@ writeFileReq host h localFile remotePath = do
   resp <- L.hGetContents h
   let WriteAddress res = fromByteString resp
       writeBlock (port,bid) fblock = do
-        putStrLn "Write a block"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
         hSetBuffering handle NoBuffering
         hSetBinaryMode handle True
 
-        putStrLn "Was able to connect"
         L.hPut handle (toByteString $ CDNWrite bid fblock)
-        putStrLn "Send a message"
         hClose handle
-  putStrLn $ "Received write address: " ++ show res
   case res of
     Left e -> putStrLn $ show e
     Right addrs -> zipWithM_ writeBlock addrs (chunksOf (fromIntegral blockSize) fdata) >> putStrLn "done writing"

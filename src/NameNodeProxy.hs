@@ -18,7 +18,6 @@ namenodeproxy socket pid = forever $ do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   liftIO $ hSetBuffering h NoBuffering
-  say $ "client connected"
   msg <- liftIO $ L.hGetContents h
   handleMessage (decode msg) h pid
   liftIO $ hClose h
@@ -34,12 +33,10 @@ handleMessage (Read fp) h pid = do
   (sendport,receiveport) <- newChan
   send pid (ReadP fp sendport)
   resp <- receiveChan receiveport
-  say $ show resp
   liftIO $ L.hPutStrLn h $ encode $ ReadAddress resp
 
 handleMessage (Write fp bc) h pid = do
   (sendport,receiveport) <- newChan
   send pid (WriteP fp bc sendport)
   resp <- receiveChan receiveport
-  say $ show resp
   liftIO $ L.hPutStrLn h $ toByteString $ WriteAddress resp

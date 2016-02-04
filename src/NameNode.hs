@@ -134,7 +134,6 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
 
 handleClients :: NameNode -> ProxyToNameNode -> STM ()
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
-  writeIOChan nameNode $ say "received Write req from client"
   dNodes <- readTVar dataNodes
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
@@ -154,7 +153,6 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
       updateFsImg = M.insert fp (map snd positions)
       maxBlockId = blockId + length selectedDnodes
 
-    writeIOChan nameNode $ say $ "response for client " ++ (show positions)
     writeIOChan nameNode $ liftIO $ flushBlockId maxBlockId
     writeIOChan nameNode $ liftIO $ flushFsImage nameNode
 
@@ -165,7 +163,6 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
 
 
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
-  writeIOChan nameNode $ say "received Read req from client"
   fsImg <- readTVar fsImage
   dnIdAddrs <- readTVar dnIdAddrMap
   case M.lookup fp fsImg of
@@ -182,11 +179,9 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       let mpidsnbids = zip mpids bids
       --let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid bMap, bid)) bids
       let res = map (\(dnodeIds, bid) -> (fromJust $ M.lookup (S.elemAt 0 dnodeIds) dnIdAddrs, bid)) mpidsnbids
-      writeIOChan nameNode $ say $ "response for client " ++ (show res)
       sendChanSTM nameNode chan (Right res)
 
 handleClients nameNode@NameNode{..} (ListFilesP chan) = do
-  writeIOChan nameNode $ say "received Show req from client"
   fsImg <- readTVar fsImage
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
 
@@ -211,7 +206,6 @@ hopefully a = case a of
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> STM ()
 handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
-  writeIOChan nameNode $ say $ "received blockrep from " ++ (show dnodeId)
   bMap <- readTVar blockMap
   rMap <- readTVar repMap
   idPidMap <- readTVar dnIdPidMap
@@ -239,8 +233,6 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   --datanodes that already have that BlockId + 1 for the dataNode that sent this blockreport, afterwards
   --we send a Replication request to the `current` dataNode to send that BlockId to the selected dataNodes
       pid = fromMaybe (error "This should not happen") $ M.lookup dnodeId idPidMap
-
-  writeIOChan nameNode $ say $ "new repmap " ++ (show newRepMap)
 
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
@@ -297,9 +289,7 @@ randomTakeValues gen 0 _ = (gen,[])
 randomTakeValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val = xs !! a
-      ([x],ys) = case L.partition (==val) xs of
-                    ([x],l) -> ([x],l)
-                    ps -> error $ "Errrorrr" ++ show ps ++ "  " ++ show val ++ "  " ++ show xs ++ "  " ++ show a
+      ([x],ys) = L.partition (==val) xs
       (g',zs) = randomTakeValues g (n - 1) ys
   in (g',x:zs)
 
