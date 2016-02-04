@@ -5,7 +5,7 @@ module NameNode where
 import            Control.Distributed.Process hiding (proxy)
 import            Control.Concurrent (threadDelay)
 import            Control.Concurrent.STM
-import            GHC.Conc
+import            GHC.Conc hiding (Shutdown)
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
