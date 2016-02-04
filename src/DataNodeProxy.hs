@@ -33,12 +33,14 @@ handleClient h pid = do
 -- If the client asks to read a file the proxy will return it directly to him
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
+  liftIO $ putStrLn $ "Received read for " ++ show bid
   file <- liftIO $ L.readFile (getFileName bid)
   liftIO $ L.hPutStrLn h $ toByteString $ FileBlock file
 
 -- If the client wants to read a file we write it locally and send a CDNWrite to
 -- the datanode to record the new file
 handleMessage (CDNWrite bid fd) h pid = do
+  liftIO $ putStrLn $ "Received write of " ++ show bid
   liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
   send pid (CDNWriteP bid)
 

@@ -23,7 +23,7 @@ import            System.Random
 import            Messages
 
 repFactor :: Int
-repFactor = 2
+repFactor = 7
 
 type FsImage = Map FilePath [BlockId]
 type BlockMap = Map BlockId (S.Set DataNodeId)
