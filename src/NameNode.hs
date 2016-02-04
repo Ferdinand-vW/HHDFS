@@ -40,6 +40,7 @@ data NameNode = NameNode
   , repMap :: TVar BlockMap
   , procChan :: TChan (Process ())
   , blockIdCounter :: TVar Int
+  , dataNodeIdCounter :: TVar Int
   , randomVar :: TVar StdGen
   }
 
@@ -50,12 +51,14 @@ fsImageFile = nnDataDir ++ "fsImage.fs"
 dnMapFile = nnDataDir ++ "dn_map.map"
 blockMapFile = nnDataDir ++ "block_map.map"
 blockIdFile = nnDataDir ++ "blockId.id"
+dataNodeIdFile = nnDataDir ++ "dataNodeId.id"
 
 mkNameNode :: STM NameNode
 mkNameNode = do
   oldDnMap <- unsafeIOToSTM readDnMap
   oldFsImg <- unsafeIOToSTM readFsImage
   oldBlockId <- unsafeIOToSTM readBlockId
+  oldDataNodeId <- unsafeIOToSTM readDataNodeId
 
   pChan <- newTChan
   fsImg <- newTVar oldFsImg
@@ -65,6 +68,7 @@ mkNameNode = do
   bMap <- newTVar M.empty
   rMap <- newTVar M.empty
   blockId <- newTVar oldBlockId
+  dataNodeId <- newTVar oldDataNodeId
   rVar <- newTVar $ mkStdGen 0
 
   return NameNode { dataNodes=dNodes
@@ -75,6 +79,7 @@ mkNameNode = do
                 , repMap=rMap
                 , procChan=pChan
                 , blockIdCounter=blockId
+                , dataNodeIdCounter = dataNodeId
                 , randomVar=rVar }
 
 nameNode :: Process ()
@@ -114,12 +119,18 @@ handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
   writeTVar dnIdAddrMap dnAddressMap
   modifyTVar' dataNodes (dnId:)
 
-handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
+{-handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   idPidMap <- readTVar dnIdPidMap
   sendChanSTM nameNode chan $ nextDnId (M.keys idPidMap)
   where
     nextDnId [] = 0
-    nextDnId a = maximum a + 1
+    nextDnId a = maximum a + 1-}
+
+handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
+  dnIdCounter <- readTVar dataNodeIdCounter
+  modifyTVar dataNodeIdCounter (+1)
+  writeIOChan nameNode (liftIO $ flushDataNodeId $ dnIdCounter + 1)
+  sendChanSTM nameNode chan $ (dnIdCounter + 1)
 
 handleClients :: NameNode -> ProxyToNameNode -> STM ()
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
@@ -235,7 +246,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
   writeTVar repMap newRepMap
   mapM_ (\(k,a) -> do
     let dataNodesPids = filter (/= pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
-    dnIds <- selectRandomDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
+    dnIds <- selectRandomTakeDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
   return ()
@@ -256,7 +267,7 @@ sendChanSTM NameNode{..} chan msg = writeTChan procChan (sendChan chan msg)
 writeIOChan :: NameNode -> Process () -> STM ()
 writeIOChan NameNode{..} = writeTChan procChan
 
-selectRandomDataNodes :: Eq a => NameNode -> Int -> [a] -> STM [a]
+selectRandomDataNodes :: (Show a,Eq a) => NameNode -> Int -> [a] -> STM [a]
 selectRandomDataNodes nn@NameNode{..} n datanodes = do
  g <- readTVar randomVar
  let (g',r) = randomValues g n datanodes
@@ -264,16 +275,33 @@ selectRandomDataNodes nn@NameNode{..} n datanodes = do
  return r
 
 
-randomValues :: Eq a => StdGen -> Int -> [a] -> (StdGen,[a])
+randomValues :: (Show a,Eq a) => StdGen -> Int -> [a] -> (StdGen,[a])
+randomValues gen _ [] = (gen,[])
 randomValues gen 0 _ = (gen,[])
 randomValues gen n xs =
   let (a,g) = randomR (0,length xs - 1) gen
       val  = xs !! a
-      ([x],ys) = L.partition (==val) xs
-      (g',zs) = randomValues g (n - 1) ys
+      (g',ys) = randomValues g (n - 1) xs
+  in (g',val:ys)
+
+selectRandomTakeDataNodes :: (Show a,Eq a) => NameNode -> Int -> [a] -> STM [a]
+selectRandomTakeDataNodes nn@NameNode{..} n datanodes = do
+ g <- readTVar randomVar
+ let (g',r) = randomTakeValues g n datanodes
+ writeTVar randomVar g'
+ return r
+
+randomTakeValues :: (Show a,Eq a) => StdGen -> Int -> [a] -> (StdGen,[a])
+randomTakeValues gen _ [] = (gen,[])
+randomTakeValues gen 0 _ = (gen,[])
+randomTakeValues gen n xs =
+  let (a,g) = randomR (0,length xs - 1) gen
+      val = xs !! a
+      ([x],ys) = case L.partition (==val) xs of
+                    ([x],l) -> ([x],l)
+                    ps -> error $ "Errrorrr" ++ show ps ++ "  " ++ show val ++ "  " ++ show xs ++ "  " ++ show a
+      (g',zs) = randomTakeValues g (n - 1) ys
   in (g',x:zs)
-
-
 
 flushFsImage :: NameNode -> IO ()
 flushFsImage NameNode{..} = do
@@ -306,3 +334,12 @@ readBlockId = do
   fileExist <- liftIO $ doesFileExist blockIdFile
   unless fileExist $ liftIO $ flushBlockId 0
   decodeFile blockIdFile
+
+flushDataNodeId :: Int -> IO ()
+flushDataNodeId = encodeFile dataNodeIdFile
+
+readDataNodeId :: IO Int
+readDataNodeId = do
+  fileExist <- liftIO $ doesFileExist dataNodeIdFile
+  unless fileExist $ liftIO $ flushDataNodeId 0
+  decodeFile dataNodeIdFile
