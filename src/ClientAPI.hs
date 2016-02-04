@@ -61,22 +61,25 @@ readFileReq host h fpath = do
   resp <- L.hGetContents h
   let ReadAddress mexists = fromByteString resp
       readBlock bs (port,bid) = do
-        putStrLn "Try to connect to datanode"
+        -- putStrLn "Try to connect to datanode"
         handle <- connectTo host (PortNumber $ fromIntegral $ read port)
         hSetBuffering handle NoBuffering
         hSetBinaryMode handle True
         open <- hIsOpen handle
-        putStrLn "Connected to datanode"
+        -- putStrLn "Connected to datanode"
         L.hPutStrLn handle (toByteString $ CDNRead bid)
-        putStrLn "Send read command"
+        -- putStrLn "Send read command"
         fdata <- L.hGetContents handle
-        putStrLn "Received data"
+        -- putStrLn "Received data"
         let FileBlock fd = fromByteString fdata
         return $ L.append bs fd
-  putStrLn "received read addresses"
+  -- putStrLn "received read addresses"
   case mexists of
     Left e -> putStrLn (show e) >> return Nothing
-    Right addrs -> Just <$> foldM readBlock L.empty addrs
+    Right addrs -> do
+      putStrLn (show addrs)
+      hClose h
+      Just <$> foldM readBlock L.empty addrs
 
 chunksOf :: Int -> L.ByteString -> [L.ByteString]
 chunksOf n s = case L.splitAt (fromIntegral n) s of
