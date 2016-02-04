@@ -28,10 +28,12 @@ handleClient h pid = do
 
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
+  liftIO $ putStrLn $ "Received read for " ++ show bid
   file <- liftIO $ L.readFile (getFileName bid)
   liftIO $ L.hPutStrLn h $ toByteString $ FileBlock file
 
 handleMessage (CDNWrite bid fd) h pid = do
+  liftIO $ putStrLn $ "Received write of " ++ show bid
   liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
   send pid (CDNWriteP bid)
 
