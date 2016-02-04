@@ -28,33 +28,6 @@ dnConfDir = "./dn_config/"
 dnConfFile  = dnConfDir ++ "datanode.conf"
 dnBlockFile = dnConfDir ++ "datanode.blocks"
 
-readDataNodeId :: IO DataNodeId
-readDataNodeId = decodeFile dnConfFile
-
-writeDataNodeId :: DataNodeId -> IO ()
-writeDataNodeId = encodeFile dnConfFile
-
-readDataNodeBlocks :: IO [BlockId]
-readDataNodeBlocks = decodeFile dnBlockFile
-
-writeDataNodeBlocks :: [BlockId] -> IO ()
-writeDataNodeBlocks = encodeFile dnBlockFile
-
-verifyConfig :: ProcessId -> Process ()
-verifyConfig nnid = do
-  fileExist <- liftIO $ doesFileExist dnConfFile
-  unless fileExist $ do
-    (sendPort, receivePort) <- newChan -- Ask NameNode for an Id if we dont have one already
-    send nnid $ WhoAmI sendPort
-    res <- receiveChan receivePort -- Recieve the ID from the namenode and store it locally
-    liftIO $ writeDataNodeId res
-
-readBlocks :: IO [BlockId]
-readBlocks = do
-  fileExist <- doesFileExist dnBlockFile
-  unless fileExist $ writeDataNodeBlocks []
-  readDataNodeBlocks
-
 dataNode :: Port -> ProcessId -> Process ()
 dataNode port nnid = do
 
@@ -85,7 +58,7 @@ dataNode port nnid = do
   pid' <- spawnLocal $ handleMessages nnid dn
   send nnid $ HandShake pid' dnId bids port'
 
-  --Spawn a local process, which every 2 seconds sends a blockreport to the namenode
+  --Spawn a local process, which on changes sends a blockreport to the namenode
   spawnLocal $ sendBlockReports nnid dn
   --Spawn a local process, which writes the blockIds that this datanode holds to file
   --after every added or deleted blockId
@@ -133,6 +106,7 @@ handleProxyMessages nnid dn@DataNode{..} =
               modifyTVar blockIds $ \xs -> filter (/=bid) xs
             )
 
+-- We send block reports as soon as we detect a change in the datanode blockIds
 sendBlockReports :: ProcessId -> DataNode -> Process ()
 sendBlockReports nnid dn@DataNode{..} = forever $ do
     bids <- liftIO $ readTVarIO blockIds
@@ -142,12 +116,14 @@ sendBlockReports nnid dn@DataNode{..} = forever $ do
       newbids <- readNewBlockIds dn oldbids --Blocking call, waits for blockIds to be changed
       sendSTM dn nnid (BlockReport dnId newbids)
 
+-- We persit the blockIds every time we add a new one
 writeBlockReports :: DataNode -> Process ()
 writeBlockReports dn@DataNode{..} = forever $ liftIO $ atomically $ do
     bids <- readTVar blockIds
     newbids <- readNewBlockIds dn bids
     writeIOChan dn $ liftIO $ writeDataNodeBlocks newbids
 
+-- Retries untill the block ids have changed
 readNewBlockIds :: DataNode -> [BlockId] -> STM [BlockId]
 readNewBlockIds dn@DataNode{..} oldbids = do
     newbids <- readTVar blockIds
@@ -155,9 +131,36 @@ readNewBlockIds dn@DataNode{..} oldbids = do
         then return newbids
         else retry
 
+-- Utility 
+readDataNodeId :: IO DataNodeId
+readDataNodeId = decodeFile dnConfFile
+
+writeDataNodeId :: DataNodeId -> IO ()
+writeDataNodeId = encodeFile dnConfFile
+
+readDataNodeBlocks :: IO [BlockId]
+readDataNodeBlocks = decodeFile dnBlockFile
+
+writeDataNodeBlocks :: [BlockId] -> IO ()
+writeDataNodeBlocks = encodeFile dnBlockFile
+
+verifyConfig :: ProcessId -> Process ()
+verifyConfig nnid = do
+  fileExist <- liftIO $ doesFileExist dnConfFile
+  unless fileExist $ do
+    (sendPort, receivePort) <- newChan -- Ask NameNode for an Id if we dont have one already
+    send nnid $ WhoAmI sendPort
+    res <- receiveChan receivePort -- Recieve the ID from the namenode and store it locally
+    liftIO $ writeDataNodeId res
+
+readBlocks :: IO [BlockId]
+readBlocks = do
+  fileExist <- doesFileExist dnBlockFile
+  unless fileExist $ writeDataNodeBlocks []
+  readDataNodeBlocks
+
 getFileName :: BlockId -> FilePath
 getFileName bid = dnDataDir ++ show bid ++ ".dat"
-
 
 spawnProcListener :: DataNode -> Process ()
 spawnProcListener DataNode{..} = forever $ join $ liftIO $ atomically $ readTChan procChan

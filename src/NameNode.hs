@@ -55,11 +55,14 @@ dataNodeIdFile = nnDataDir ++ "dataNodeId.id"
 
 mkNameNode :: STM NameNode
 mkNameNode = do
+
+  -- This is safe to do since we are only reading config files that do not change in this transaction
   oldDnMap <- unsafeIOToSTM readDnMap
   oldFsImg <- unsafeIOToSTM readFsImage
   oldBlockId <- unsafeIOToSTM readBlockId
   oldDataNodeId <- unsafeIOToSTM readDataNodeId
 
+  -- Initialize everything that is needed
   pChan <- newTChan
   fsImg <- newTVar oldFsImg
   dnMap <- newTVar oldDnMap
@@ -86,9 +89,11 @@ nameNode :: Process ()
 nameNode = do
   liftIO $ createDirectoryIfMissing False nnDataDir
 
+
   nn <- liftIO $ atomically mkNameNode
 
-  spawnLocal (spawnProcListener nn) -- spawn local proxy to execute process and IO actions
+  -- spawn local proxy to execute process and IO actions
+  spawnLocal (spawnProcListener nn)
 
   forever $
     receiveWait
@@ -100,7 +105,8 @@ nameNode = do
           liftIO $ atomically $ handleBlockReport nn blockreport
       ]
 
-
+-- A Datanode can send us two kind of messages. In a HandShake the dn tells us
+-- his identity. We add the datanode to the dataNodeList and his blocks to the block map
 handleDataNodes :: NameNode -> HandShake -> STM ()
 handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
   idPidMap <- readTVar dnIdPidMap
@@ -119,19 +125,15 @@ handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
   writeTVar dnIdAddrMap dnAddressMap
   modifyTVar' dataNodes (dnId:)
 
-{-handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
-  idPidMap <- readTVar dnIdPidMap
-  sendChanSTM nameNode chan $ nextDnId (M.keys idPidMap)
-  where
-    nextDnId [] = 0
-    nextDnId a = maximum a + 1-}
-
+-- In case a Datanode sends a WhoAmiI we assign a unique id to that datanode and
+-- send it back to him to complete initialization
 handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
   dnIdCounter <- readTVar dataNodeIdCounter
   modifyTVar dataNodeIdCounter (+1)
   writeIOChan nameNode (liftIO $ flushDataNodeId $ dnIdCounter + 1)
-  sendChanSTM nameNode chan $ (dnIdCounter + 1)
+  sendChanSTM nameNode chan $ dnIdCounter + 1
 
+-- Handle messages from the namenode proxy
 handleClients :: NameNode -> ProxyToNameNode -> STM ()
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
   dNodes <- readTVar dataNodes
@@ -146,6 +148,7 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
       dnodePids = mapMaybe (`M.lookup` idPidMap) dNodes
       dnodeAddrs = mapMaybe (`M.lookup` dnIdAddrs) dNodes
 
+    -- We pick some random datanodes to store the blocks we are receiving
     selectedDnodes <- selectRandomDataNodes nameNode blockCount dnodeAddrs
 
     let
@@ -153,12 +156,15 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
       updateFsImg = M.insert fp (map snd positions)
       maxBlockId = blockId + length selectedDnodes
 
+    -- We flush the fsImage and the taken blockIds to assure consistency on startup
     writeIOChan nameNode $ liftIO $ flushBlockId maxBlockId
     writeIOChan nameNode $ liftIO $ flushFsImage nameNode
 
+    -- We update the tvars holding the updated data
     writeTVar blockIdCounter maxBlockId
     modifyTVar' fsImage updateFsImg
 
+    -- We send the positions back to the client via the procChanel
     sendChanSTM nameNode chan (Right positions)
 
 
@@ -174,22 +180,18 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       rMap <- readTVar repMap
       idPidMap <- readTVar dnIdPidMap
 
-      -- We could insert some retries here instead of the fromJust
+      -- We look for the requested blocks in our bmap.
+      -- If we dont find them yet, this means they are currently being replicated
+      -- so we call retry. As soon as the replication is over this transaction will be rerun
+      -- and the blocks will all be found.
       mpids <- forM bids $ pickPids bMap
       let mpidsnbids = zip mpids bids
-      --let mpids = map (\bid -> (head $ S.toList $ fromJust $ M.lookup bid bMap, bid)) bids
       let res = map (\(dnodeIds, bid) -> (fromJust $ M.lookup (S.elemAt 0 dnodeIds) dnIdAddrs, bid)) mpidsnbids
       sendChanSTM nameNode chan (Right res)
 
 handleClients nameNode@NameNode{..} (ListFilesP chan) = do
   fsImg <- readTVar fsImage
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
-
-handleClients nameNode@NameNode{..} Shutdown = do
-  dNodes <- readTVar dataNodes
-  idPidMap <- readTVar dnIdPidMap
-  mapM_ (\pid -> writeIOChan nameNode (kill pid "User shutdown")) (mapMaybe (`M.lookup` idPidMap) dNodes)
-  writeIOChan nameNode terminate
 
 
 pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)

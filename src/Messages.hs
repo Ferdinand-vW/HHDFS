@@ -42,7 +42,6 @@ data HandShake = HandShake
 data ProxyToNameNode = ListFilesP (SendPort (ClientRes [FilePath]))
                     | ReadP FilePath (SendPort (ClientRes [RemoteAddress]))
                     | WriteP FilePath BlockCount (SendPort (ClientRes [RemoteAddress]))
-                    | Shutdown
   deriving (Typeable, Generic)
 
 data ClientToNameNode = ListFiles
@@ -92,10 +91,6 @@ instance Binary HandShake
 instance Binary ClientError
 instance Binary BlockReport
 
-{-instance Serialize ProxyToClient
-instance Serialize ClientToNameNode
-instance Serialize ClientToDataNode
-instance Serialize ClientError-}
 
 toByteString :: Binary a => a -> L.ByteString
 toByteString = encode

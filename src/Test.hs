@@ -2,7 +2,7 @@ module Test where
 
 import System.IO
 import System.Directory
-import GHC.Conc(forkIO)
+import GHC.Conc (forkIO)
 import Control.Distributed.Process
 import Network
 import System.Random (mkStdGen, randoms)
