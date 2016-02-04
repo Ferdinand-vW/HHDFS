@@ -21,6 +21,7 @@ handleClient h pid = do
   say $ "client connected"
   msg <- liftIO $ L.hGetContents h
   handleMessage (decode msg) h pid
+  liftIO $ hClose h
 
 handleMessage :: ClientToNameNode -> Handle -> ProcessId -> Process ()
 handleMessage ListFiles h pid  = do

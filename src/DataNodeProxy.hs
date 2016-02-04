@@ -27,6 +27,7 @@ handleClient h pid = do
   say $ "received msg"
 
   handleMessage (fromByteString msg) h pid
+  liftIO $ hClose h
 
 handleMessage :: ClientToDataNode -> Handle -> ProcessId -> Process ()
 handleMessage (CDNRead bid) h pid = do
