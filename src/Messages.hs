@@ -25,7 +25,7 @@ type FileData = L.ByteString
 
 -- Block size in bytes. For now, very small for testing purposes
 blockSize :: Integer
-blockSize = 1 * 1048576 --1MB
+blockSize = 1048576 `div` 2 --1/2MB
 
 data ClientConnection = Response ProcessId
   deriving (Typeable, Generic)

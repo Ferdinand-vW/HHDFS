@@ -18,8 +18,7 @@ import ClientAPI (listFilesReq,writeFileReq,readFileReq, shutdownReq)
 
 
 smallFiles :: [String]
-smallFiles = ["smallfile1","smallfile2","smallfile3","smallfile4","smallfile5",
-              "smallfile6","smallfile7","smallfile8","smallfile9","smallfile10"]
+smallFiles = ["mediumfile1","mediumfile2","mediumfile3","mediumfile4","mediumfile5"]
 
 bigFiles :: [String]
 bigFiles = ["bigfile1", "bigfile2", "bigfile3", "bigfile4"]
@@ -93,7 +92,7 @@ testRead host port fName = do
   writeToDisk filename file
 
   hClose h
-  
+
 writeToDisk :: FilePath -> Maybe FileData -> IO ()
 writeToDisk fpath mfdata = case mfdata of
   Nothing -> putStrLn "Could not find file on network"
