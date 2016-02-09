@@ -68,7 +68,7 @@ data ProxyToDataNode = CDNWriteP BlockId
   deriving (Typeable, Generic, Show)
 
 data ClientToDataNode = CDNRead BlockId
-                      | CDNWrite BlockId FileData
+                      | CDNWrite BlockId
                       | CDNDelete BlockId
   deriving (Typeable, Generic, Show)
 
@@ -92,8 +92,8 @@ instance Binary ClientError
 instance Binary BlockReport
 
 
-toByteString :: Binary a => a -> L.ByteString
-toByteString = encode
+toByteString :: Binary a => a -> B.ByteString
+toByteString = L.toStrict . encode
 
-fromByteString :: Binary a => L.ByteString -> a
-fromByteString = decode
+fromByteString :: Binary a => B.ByteString -> a
+fromByteString = decode . L.fromStrict

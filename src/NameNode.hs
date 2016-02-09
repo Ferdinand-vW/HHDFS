@@ -5,6 +5,7 @@ module NameNode where
 import            Control.Distributed.Process hiding (proxy)
 import            Control.Concurrent (threadDelay)
 import            Control.Concurrent.STM
+import            Control.Exception
 import            GHC.Conc hiding (Shutdown)
 import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
@@ -23,7 +24,7 @@ import            System.Random
 import            Messages
 
 repFactor :: Int
-repFactor = 7
+repFactor = 1
 
 type FsImage = Map FilePath [BlockId]
 type BlockMap = Map BlockId (S.Set DataNodeId)
@@ -169,8 +170,11 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
 
 
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
+  throwSTM $ AssertionFailed "test2"
+  error "please...."
   fsImg <- readTVar fsImage
   dnIdAddrs <- readTVar dnIdAddrMap
+  writeIOChan nameNode $ say "test"
   case M.lookup fp fsImg of
     Nothing -> sendChanSTM nameNode chan (Left FileNotFound)
     Just bids -> do
@@ -197,8 +201,8 @@ handleClients nameNode@NameNode{..} (ListFilesP chan) = do
 pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
 pickPids bMap bid =
   case M.lookup bid bMap of
-    Nothing -> retry
-    Just a -> return a
+    Nothing -> throwSTM $ AssertionFailed "test2"
+    Just a -> throwSTM $ AssertionFailed "test2"
 
 
 hopefully a = case a of
@@ -238,9 +242,11 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
+  writeIOChan nameNode $ say $ show newBlMap ++ "   " ++ show newRepMap
   mapM_ (\(k,a) -> do
     let dataNodesPids = filter (/= pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
     dnIds <- selectRandomTakeDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
+    writeIOChan nameNode $ say $ show dnIds
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
   return ()

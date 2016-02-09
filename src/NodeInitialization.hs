@@ -16,7 +16,10 @@ import Network.Transport.TCP
 import qualified Data.ByteString.Char8 as B
 import Data.Binary (encode,decode)
 import System.IO
-import Network
+import Network hiding(sClose)
+import Network.Socket
+import Network.BSD
+import Control.Exception
 import Control.Monad (forever)
 
 import Messages
@@ -65,10 +68,23 @@ setupNameNode p host port = do
 
 listenForClients :: Host -> Port -> ProcessId -> Process ()
 listenForClients host port pid = do
-  socket <- liftIO $ listenOn (PortNumber $ fromIntegral $ 1 + read port)
+  socket <- liftIO $ listenOn' (PortNumber $ fromIntegral $ 1 + read port)
   namenodeproxy socket pid
 
 waitForConnections :: Host -> Port -> ProcessId -> Process ()
 waitForConnections host port pid = do
-  socket <- liftIO $ listenOn (PortNumber $ fromIntegral $ 1 + read port)
+  socket <- liftIO $ listenOn' (PortNumber $ fromIntegral $ 1 + read port)
   datanodeproxy socket pid
+
+
+listenOn' (PortNumber port) = do
+    proto <- getProtocolNumber "tcp"
+    bracketOnError
+        (socket AF_INET Stream proto)
+        (sClose)
+        (\sock -> do
+            setSocketOption sock ReuseAddr 1
+            bindSocket sock (SockAddrInet port iNADDR_ANY)
+            listen sock 2048
+            return sock
+        )

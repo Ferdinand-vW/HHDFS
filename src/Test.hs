@@ -90,7 +90,8 @@ testRead host port fName = do
   hSetBuffering h LineBuffering
 
   let filename = "file" ++ fName ++ ".out"
+      local = "local/" ++ filename
   putStrLn $ "read " ++ fName
-  file <- readFileReq host h fName
+  file <- readFileReq host h local fName 
   -- We do not account for the time taken to write a file to disk when running tests
   hClose h

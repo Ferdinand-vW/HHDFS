@@ -72,16 +72,24 @@ dataNode port nnid = do
 handleMessages :: ProcessId -> DataNode -> Process ()
 handleMessages nnid dn@DataNode{..} = forever $ do
   msg <- expect :: Process IntraNetwork
+  liftIO $ putStrLn "received some message"
   spawnLocal $
     case msg of
       Repl bid pids -> do
+        liftIO $ putStrLn $ "received repl " ++ show pids
+        liftIO $ putStrLn $ "file name " ++ (getFileName bid)
         file <- liftIO $ L.readFile (getFileName bid)
-        unless (null pids) (
+        liftIO $ putStrLn $ " gets here"
+        unless (null pids) ( do
+          liftIO $ putStrLn $ "sending message " ++ show (head pids)
           liftIO $ atomically $ do
             sendSTM dn (head pids) (WriteFile bid file (tail pids))
           )
       WriteFile bid fdata pids -> do
+        liftIO $ putStrLn "received write request from datanode"
         liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
+        bids <- liftIO $ atomically $ readTVar blockIds
+        liftIO $ putStrLn $ show bids
         liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         unless (null pids) (
           liftIO $ atomically $ do
