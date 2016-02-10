@@ -10,6 +10,8 @@ import Control.Monad (forever)
 import qualified Network.Socket as S
 import qualified Pipes.ByteString as PB
 import qualified Pipes as P
+import System.IO.Streams (InputStream, OutputStream)
+import qualified System.IO.Streams as Streams
 
 import Messages
 
@@ -24,43 +26,49 @@ datanodeproxy socket pid = do
   liftIO $ S.setSocketOption socket S.ReuseAddr 1
   forever $ do
     (h,_,_) <- liftIO $ accept socket
-    liftIO $ putStrLn "Accepted connection"
+    --liftIO $ putStrLn "Accepted connection"
     spawnLocal $ handleClient h pid
 
 -- Once the client has connected we simply wait for a message on the socket
 handleClient :: IO.Handle -> ProcessId -> Process ()
 handleClient h pid = do
-  liftIO $ IO.hSetBuffering h IO.NoBuffering
-  liftIO $ IO.hSetBinaryMode h True
-  msg <- liftIO $ B.hGetLine h
-  liftIO $ putStrLn "received msg"
+{-  liftIO $ IO.hSetBuffering h IO.NoBuffering
+  liftIO $ IO.hSetBinaryMode h True-}
+  (prod,cons) <- liftIO $ Streams.handleToStreams h
+  Just msg <- liftIO $ Streams.read prod
+  --liftIO $ putStrLn "received msg"
 
-  handleMessage (decode $ L.fromStrict msg) h pid
-  liftIO $ IO.hClose h
+  handleMessage (fromByteString msg) (prod,cons) pid
 
 -- If the client asks to read a file the proxy will return it directly to him
-handleMessage :: ClientToDataNode -> IO.Handle -> ProcessId -> Process ()
-handleMessage (CDNRead bid) h pid = do
+handleMessage :: ClientToDataNode -> (InputStream B.ByteString,OutputStream B.ByteString) -> ProcessId -> Process ()
+handleMessage (CDNRead bid) (prod,cons) pid = do
   liftIO $ putStrLn $ "Received read for " ++ show bid
-  --file <- liftIO $ L.readFile (getFileName bid)
   --liftIO $ L.hPutStrLn h $ encode $ FileBlock file
-  fhandle <- liftIO $ IO.openFile (getFileName bid) IO.ReadMode
-  let fprod = PB.fromHandle fhandle
-      fcons = PB.toHandle h
-  liftIO $ P.runEffect $ fprod P.>-> fcons
-  liftIO $ IO.hClose fhandle
+  --fhandle <- liftIO $ IO.openFile (getFileName bid) IO.ReadMode
+  --fprod <- liftIO $ Streams.handleToInputStream fhandle
+  liftIO $ Streams.withFileAsInput (getFileName bid) (\fprod -> do
+    Streams.connect fprod cons)
+  --liftIO $ P.runEffect $ fprod P.>-> fcons
 
 -- If the client wants to read a file we write it locally and send a CDNWrite to
 -- the datanode to record the new file
-handleMessage (CDNWrite bid) h pid = do
+handleMessage (CDNWrite bid) (prod,cons) pid = do
   liftIO $ putStrLn $ "Received write of " ++ show bid
-  let fprod = PB.fromHandle h
-  fhandle <- liftIO $ IO.openFile (getFileName bid) IO.WriteMode
-  let fcons = PB.toHandle fhandle
-  liftIO $ P.runEffect $ fprod P.>-> fcons
-  liftIO $ IO.hClose fhandle
+  --(prod,cons) <- liftIO $ Streams.handleToStreams h
+  --fhandle <- liftIO $ IO.openFile (getFileName bid) IO.WriteMode
+  liftIO $ Streams.withFileAsOutput (getFileName bid) (\fcons -> do
+    Streams.connect prod fcons
+    )
+  liftIO $ putStrLn "connect streams"
+  --liftIO $ putStrLn "done writing"
+  liftIO $ putStrLn "completed connected streams"
   --liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
+  liftIO $ putStrLn "send write to datanode"
   send pid (CDNWriteP bid)
+  liftIO $ putStrLn "write is complete"
+  --liftIO $ Streams.write (Just $ toByteString WriteComplete) cons
+  liftIO $ putStrLn "done"
 
 
 getFileName :: BlockId -> FilePath

@@ -52,6 +52,7 @@ data ClientToNameNode = ListFiles
 data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | ReadAddress (ClientRes [RemoteAddress])
                    | WriteAddress (ClientRes [RemoteAddress])
+                   | WriteComplete
                    | FileBlock FileData
   deriving (Typeable, Generic,Show)
 

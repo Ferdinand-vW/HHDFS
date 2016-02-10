@@ -98,8 +98,9 @@ nameNode = do
 
   forever $
     receiveWait
-      [ match $ \(clientReq :: ProxyToNameNode) ->
-          void $ spawnLocal (liftIO $ atomically $ handleClients nn clientReq)
+      [ match $ \(clientReq :: ProxyToNameNode) -> do
+          (liftIO $ atomically $ handleClients nn clientReq)
+          liftIO $ putStrLn "finished process"
       , match $ \(handShake :: HandShake) ->
           liftIO $ atomically $ handleDataNodes nn handShake
       , match $ \(blockreport :: BlockReport) ->
@@ -170,11 +171,9 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
 
 
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
-  throwSTM $ AssertionFailed "test2"
-  error "please...."
   fsImg <- readTVar fsImage
   dnIdAddrs <- readTVar dnIdAddrMap
-  writeIOChan nameNode $ say "test"
+  writeIOChan nameNode $ liftIO $ putStrLn "test"
   case M.lookup fp fsImg of
     Nothing -> sendChanSTM nameNode chan (Left FileNotFound)
     Just bids -> do
@@ -201,8 +200,8 @@ handleClients nameNode@NameNode{..} (ListFilesP chan) = do
 pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
 pickPids bMap bid =
   case M.lookup bid bMap of
-    Nothing -> throwSTM $ AssertionFailed "test2"
-    Just a -> throwSTM $ AssertionFailed "test2"
+    Nothing -> retry
+    Just a -> return a
 
 
 hopefully a = case a of
