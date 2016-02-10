@@ -15,7 +15,8 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified System.IO as IO
 import Data.Binary(decode,encode)
-import Network
+import Network hiding (sClose)
+import Network.Socket
 import System.IO
 import qualified Pipes.ByteString as PB
 import qualified Pipes as P
@@ -56,30 +57,56 @@ writeFileReq host h localFile remotePath = do
   let WriteAddress res = fromByteString resp
 
       -- The Datanode sends us back the port to contact the datanode.
-      writeBlock fprod (port,bid) = do
+      writeBlock fprod (port,bid) = withSocketsDo $ do
         putStrLn $ show bid
-        handle <- connectTo host (PortNumber $ fromIntegral $ read port)
-        hSetBuffering handle NoBuffering
-        hSetBinaryMode handle True
+        --handle <- connectTo host (PortNumber $ fromIntegral $ read port)
+        --hSetBuffering handle NoBuffering
+        --hSetBinaryMode handle True
+        addrInfo <- getAddrInfo Nothing (Just host) (Just port)
+        let serverAddr = head addrInfo
+        sock <- socket (addrFamily serverAddr) Stream defaultProtocol
+        connect sock (addrAddress serverAddr)
+        (prod,cons) <- Streams.socketToStreams sock
         --B.hPutStrLn handle (toByteString $ CDNWrite bid)
-        (cons) <- Streams.handleToOutputStream handle
         Streams.write (Just $ toByteString $ CDNWrite bid) cons
+        Just rsp <- Streams.read prod
+        putStrLn $ show (fromByteString rsp :: ProxyToClient)
+        --(cons) <- Streams.handleToOutputStream handle
         --putStrLn "sending bid"
-        fblockprod <- Streams.takeBytes (fromIntegral blockSize) fprod
+        --putStrLn $ show (fromIntegral blockSize)
+        fblockprod <- Streams.takeExactly (fromIntegral blockSize) fprod
 
-        Streams.connect fblockprod cons
+        Streams.supply fblockprod cons
         --P.runEffect $ fprod P.>-> PB.take (fromIntegral blockSize) P.>-> fcons
         --putStrLn "done sending"
         --Just msg <- Streams.read prod 
         --let WriteComplete = fromByteString msg
         --putStrLn "done"
+        sClose sock
         return ()
-        --hClose handle
+
+      finalWriteBlock fprod (port,bid) = do
+        putStrLn $ show bid
+        addrInfo <- getAddrInfo Nothing (Just host) (Just port)
+        let serverAddr = head addrInfo
+        sock <- socket (addrFamily serverAddr) Stream defaultProtocol
+        connect sock (addrAddress serverAddr)
+        (prod,cons) <- Streams.socketToStreams sock
+        Streams.write (Just $ toByteString $ CDNWrite bid) cons
+        Just rsp <- Streams.read prod
+        putStrLn $ show (fromByteString rsp :: ProxyToClient)
+        fblockprod <- Streams.takeBytes (fromIntegral blockSize) fprod
+
+        Streams.connect fblockprod cons
+        sClose sock
   case res of
     Left e -> putStrLn $ show e
     Right addrs -> do
-      Streams.withFileAsInput localFile (\fprod -> mapM_ (writeBlock fprod) addrs)
+      Streams.withFileAsInput localFile (\fprod -> do
+        mapM_ (writeBlock fprod) (init addrs)
+        finalWriteBlock fprod (last addrs))
       putStrLn "done writing"
+      putStrLn $ show $ length addrs
 
 -- Request to read a file. Accepts the remote filepath
 readFileReq :: Host -> Handle -> FilePath -> FilePath -> IO Bool
@@ -99,15 +126,33 @@ readFileReq host h localPath remoteFile = do
 
       -- We start reading blocks from the handle
       readBlock fcons (port,bid) = do
-        putStrLn "Setup connection to datanode"
-        handle <- connectTo host (PortNumber $ fromIntegral $ read port)
-        putStrLn "Connected to datanode"
-        (prod,cons) <- Streams.handleToStreams handle
-        putStrLn "Try to send read message"
+        --putStrLn "Setup connection to datanode"
+        addrInfo <- getAddrInfo Nothing (Just host) (Just port)
+        let serverAddr = head addrInfo
+        sock <- socket (addrFamily serverAddr) Stream defaultProtocol
+        connect sock (addrAddress serverAddr)
+        (prod,cons) <- Streams.socketToStreams sock
+        --putStrLn "Connected to datanode"
+        --putStrLn "Try to send read message"
         Streams.write (Just $ toByteString $ CDNRead bid) cons
-        putStrLn "Send read message"
-        Streams.supply prod fcons
-        putStrLn "Got data"
+        --putStrLn "Send read message"
+        fblockprod <- Streams.takeExactly (fromIntegral blockSize) prod
+        Streams.supply fblockprod fcons
+        --putStrLn "Got data"
+
+      finalReadBlock fcons (port,bid) = do
+        --putStrLn "Setup connection to datanode"
+        addrInfo <- getAddrInfo Nothing (Just host) (Just port)
+        let serverAddr = head addrInfo
+        sock <- socket (addrFamily serverAddr) Stream defaultProtocol
+        connect sock (addrAddress serverAddr)
+        (prod,cons) <- Streams.socketToStreams sock
+        --putStrLn "Connected to datanode"
+        --putStrLn "Try to send read message"
+        Streams.write (Just $ toByteString $ CDNRead bid) cons
+        --putStrLn "Send read message"
+        fblockprod <- Streams.takeBytes (fromIntegral blockSize) prod
+        Streams.connect fblockprod fcons
   case mexists of
     Left e -> do
       putStrLn (show e)
@@ -116,7 +161,9 @@ readFileReq host h localPath remoteFile = do
       hClose h
       -- fold readblocks to build up the file from all the received blocks
       putStrLn "gets here"
-      Streams.withFileAsOutput localPath (\fcons -> mapM_ (readBlock fcons) addrs)
+      Streams.withFileAsOutput localPath (\fcons -> do
+        mapM_ (readBlock fcons) (init addrs)
+        finalReadBlock fcons (last addrs))
       putStrLn "should be done now"
       return True
 

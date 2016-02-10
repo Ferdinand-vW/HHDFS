@@ -98,9 +98,8 @@ nameNode = do
 
   forever $
     receiveWait
-      [ match $ \(clientReq :: ProxyToNameNode) -> do
-          (liftIO $ atomically $ handleClients nn clientReq)
-          liftIO $ putStrLn "finished process"
+      [ match $ \(clientReq :: ProxyToNameNode) ->
+          void $ spawnLocal (liftIO $ atomically $ handleClients nn clientReq)
       , match $ \(handShake :: HandShake) ->
           liftIO $ atomically $ handleDataNodes nn handShake
       , match $ \(blockreport :: BlockReport) ->
@@ -241,11 +240,9 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
 
   writeTVar blockMap newBlMap
   writeTVar repMap newRepMap
-  writeIOChan nameNode $ say $ show newBlMap ++ "   " ++ show newRepMap
   mapM_ (\(k,a) -> do
     let dataNodesPids = filter (/= pid) $ mapMaybe (`M.lookup` idPidMap) dNodes
     dnIds <- selectRandomTakeDataNodes nameNode (repFactor - S.size a + 1) dataNodesPids
-    writeIOChan nameNode $ say $ show dnIds
     sendSTM nameNode pid $ Repl k dnIds) (M.toList torepmap)
 
   return ()

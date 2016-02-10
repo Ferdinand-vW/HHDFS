@@ -24,6 +24,7 @@ client host port = do
 
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h NoBuffering
+  hSetBinaryMode h True
   void $ case words input of
           ["show"] -> do
             putStrLn "Contents:"

@@ -54,6 +54,7 @@ data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | WriteAddress (ClientRes [RemoteAddress])
                    | WriteComplete
                    | FileBlock FileData
+                   | OK
   deriving (Typeable, Generic,Show)
 
 

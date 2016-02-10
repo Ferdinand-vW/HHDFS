@@ -76,7 +76,7 @@ handleMessages nnid dn@DataNode{..} = forever $ do
   spawnLocal $
     case msg of
       Repl bid pids -> do
-        --liftIO $ putStrLn $ "received repl " ++ show pids
+        liftIO $ putStrLn $ "received repl " ++ show pids
         --liftIO $ putStrLn $ "file name " ++ (getFileName bid)
         file <- liftIO $ L.readFile (getFileName bid)
         --liftIO $ putStrLn $ " gets here"
@@ -104,6 +104,7 @@ handleProxyMessages nnid dn@DataNode{..} =
     spawnLocal $
       case msg of
         CDNWriteP bid -> do
+          liftIO $ putStrLn "updating blockids"
           liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
         CDNDeleteP bid -> do
           let fileName = getFileName bid

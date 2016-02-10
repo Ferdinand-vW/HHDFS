@@ -1,6 +1,6 @@
 module DataNodeProxy where
 
-import Network
+import Network.Socket hiding (send)
 import Control.Distributed.Process hiding (handleMessage)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
@@ -23,19 +23,21 @@ dnDataDir = "./data/"
 datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = do
   --liftIO $ S.setSocketOption socket S.RecvTimeOut 0
-  liftIO $ S.setSocketOption socket S.ReuseAddr 1
   forever $ do
-    (h,_,_) <- liftIO $ accept socket
-    --liftIO $ putStrLn "Accepted connection"
-    spawnLocal $ handleClient h pid
+    (sock,_) <- liftIO $ accept socket
+    liftIO $ putStrLn "Accepted connection"
+    spawnLocal $ do
+      handleClient sock pid
+      liftIO $ sClose sock
 
 -- Once the client has connected we simply wait for a message on the socket
-handleClient :: IO.Handle -> ProcessId -> Process ()
-handleClient h pid = do
-{-  liftIO $ IO.hSetBuffering h IO.NoBuffering
+handleClient :: Socket -> ProcessId -> Process ()
+handleClient sock pid = do
+  {-liftIO $ IO.hSetBuffering h IO.NoBuffering
   liftIO $ IO.hSetBinaryMode h True-}
-  (prod,cons) <- liftIO $ Streams.handleToStreams h
+  (prod,cons) <- liftIO $ Streams.socketToStreams sock
   Just msg <- liftIO $ Streams.read prod
+
   --liftIO $ putStrLn "received msg"
 
   handleMessage (fromByteString msg) (prod,cons) pid
@@ -54,21 +56,23 @@ handleMessage (CDNRead bid) (prod,cons) pid = do
 -- If the client wants to read a file we write it locally and send a CDNWrite to
 -- the datanode to record the new file
 handleMessage (CDNWrite bid) (prod,cons) pid = do
+  liftIO $ Streams.write (Just $ toByteString OK) cons
   liftIO $ putStrLn $ "Received write of " ++ show bid
   --(prod,cons) <- liftIO $ Streams.handleToStreams h
   --fhandle <- liftIO $ IO.openFile (getFileName bid) IO.WriteMode
   liftIO $ Streams.withFileAsOutput (getFileName bid) (\fcons -> do
     Streams.connect prod fcons
     )
-  liftIO $ putStrLn "connect streams"
+  --liftIO $ putStrLn "connect streams"
   --liftIO $ putStrLn "done writing"
-  liftIO $ putStrLn "completed connected streams"
+  --liftIO $ putStrLn "completed connected streams"
   --liftIO $ B.writeFile (getFileName bid) (L.toStrict fd)
-  liftIO $ putStrLn "send write to datanode"
+  --liftIO $ putStrLn "send write to datanode"
+  liftIO $ putStrLn "Closing socket now"
   send pid (CDNWriteP bid)
   liftIO $ putStrLn "write is complete"
   --liftIO $ Streams.write (Just $ toByteString WriteComplete) cons
-  liftIO $ putStrLn "done"
+  --liftIO $ putStrLn "done"
 
 
 getFileName :: BlockId -> FilePath
