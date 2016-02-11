@@ -14,8 +14,7 @@ import Messages
 -- We wait for a client to connect with a socket. We then spawn a local
 -- thread to handle the clients requests.
 namenodeproxy :: Socket -> ProcessId -> Process ()
-namenodeproxy socket pid = do
-  forever $ do
+namenodeproxy socket pid = forever $ do
     (h,_,_) <- liftIO $ accept socket
     spawnLocal $ handleClient h pid
 
@@ -23,6 +22,7 @@ namenodeproxy socket pid = do
 handleClient :: Handle -> ProcessId -> Process ()
 handleClient h pid = do
   liftIO $ hSetBuffering h NoBuffering
+  liftIO $ hSetBinaryMode h True
   msg <- liftIO $ B.hGetLine h
   handleMessage (fromByteString msg) h pid
   --close the handle once the message is handled

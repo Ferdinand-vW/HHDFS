@@ -73,8 +73,7 @@ testWriteAndRead host port fNames = do
 
 testWrite :: Host -> Port -> FileName -> IO ()
 testWrite host port fName = do
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
+  h <- getHandle host port
   putStrLn $ "writing " ++ fName ++ " -> " ++ fName
   let
     fIn = getPath fName
@@ -86,12 +85,18 @@ testWrite host port fName = do
 
 testRead :: Host -> Port -> String -> IO ()
 testRead host port fName = do
-  h <- connectTo host (PortNumber $ fromIntegral $ read port)
-  hSetBuffering h LineBuffering
+  h <- getHandle host port
 
   let filename = "file" ++ fName ++ ".out"
       local = "local/" ++ filename
   putStrLn $ "read " ++ fName
-  file <- readFileReq host h local fName 
+  file <- readFileReq host h local fName
   -- We do not account for the time taken to write a file to disk when running tests
   hClose h
+
+getHandle :: Host -> Port -> IO Handle
+getHandle h p = do
+  h <- connectTo h (PortNumber $ fromIntegral $ read p)
+  hSetBuffering h NoBuffering
+  hSetBinaryMode h True
+  return h

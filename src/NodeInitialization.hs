@@ -7,6 +7,7 @@ setupNameNode
 where
 
 import Control.Concurrent(threadDelay,forkIO)
+import System.Directory (createDirectoryIfMissing)
 import Control.Concurrent.MVar
 import Control.Distributed.Process hiding(handleMessage)
 import Control.Distributed.Process.Node
@@ -27,11 +28,12 @@ import NameNodeProxy
 import DataNodeProxy
 
 type Addr = String
-    
+
 
 
 setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
 setupClient p host port = do
+  createDirectoryIfMissing False "./local"
   --First we try to connect to the proxy server
   p host port
   return ()
