@@ -6,19 +6,18 @@ import            Control.Distributed.Process hiding (proxy)
 import            Control.Concurrent (threadDelay)
 import            Control.Concurrent.STM
 import            Control.Exception
+import            Control.Monad (unless, forever, join, void, forM)
 import            GHC.Conc hiding (Shutdown)
-import            System.FilePath (takeFileName, isValid)
 import            Data.Map (Map)
 import qualified  Data.Map as M
-import            Control.Monad (unless, forever, join, void, forM)
 import qualified  Data.Set as S
 import qualified  Data.List as L
 import            Data.Char (ord)
-
 import            Data.Maybe (fromJust, mapMaybe, fromMaybe)
 import            Data.Binary (encodeFile, decodeFile, Binary)
 import            Data.Typeable
 import            System.Directory (doesFileExist, createDirectoryIfMissing)
+import            System.FilePath (takeFileName, isValid)
 import            System.Random
 
 import            Messages

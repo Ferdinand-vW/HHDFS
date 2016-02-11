@@ -1,14 +1,12 @@
 module DataNodeProxy where
 
-import Network.Socket hiding (send)
-import Control.Distributed.Process hiding (handleMessage)
+import           Network.Socket hiding (send)
+import           Control.Distributed.Process hiding (handleMessage)
+import           Control.Monad (forever)
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as L
+import           Data.Binary (encode,decode)
 import qualified System.IO as IO
-import Data.Binary (encode,decode)
-import Control.Monad (forever)
-import qualified Network.Socket as S
-import System.IO.Streams (InputStream, OutputStream)
+import           System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
 
 import Messages

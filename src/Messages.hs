@@ -52,9 +52,7 @@ data ClientToNameNode = ListFiles
 data ProxyToClient = FilePaths (ClientRes [FilePath])
                    | ReadAddress (ClientRes [RemoteAddress])
                    | WriteAddress (ClientRes [RemoteAddress])
-                   | WriteComplete
-                   | FileBlock FileData
-                   | OK
+                   | OK --Signals client that the proxy is ready for a certain action
   deriving (Typeable, Generic,Show)
 
 

@@ -1,13 +1,10 @@
 module NameNodeProxy where
 
-import Network
-import Control.Distributed.Process hiding (handleMessage)
+import           Network
+import           Control.Distributed.Process hiding (handleMessage)
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as L
-import System.IO
-import Data.Binary(encode,decode)
-import Control.Monad(forever)
-import qualified Network.Socket as S
+import           System.IO
+import           Control.Monad(forever)
 
 import Messages
 

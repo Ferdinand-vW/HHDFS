@@ -2,16 +2,15 @@
 
 module DataNode where
 
-import Control.Concurrent(threadDelay)
-import Control.Concurrent.STM
-import Control.Distributed.Process
-
+import           Control.Concurrent(threadDelay)
+import           Control.Concurrent.STM
+import           Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
-import System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
-import Control.Monad (when, forever, unless, join)
-import Data.Binary
-import Data.Typeable
+import           System.Directory (doesFileExist, removeFile, createDirectoryIfMissing)
+import           Control.Monad (when, forever, unless, join)
+import           Data.Binary
+import           Data.Typeable
 
 
 import Messages

@@ -17,15 +17,13 @@ import           System.IO
 
 import Messages
 
-listFilesReq :: Handle -> IO [FilePath]
+listFilesReq :: Handle -> IO (Either ClientError [FilePath])
 listFilesReq h = do
   let lf = toByteString ListFiles
   B.hPutStrLn h lf
   msg <- B.hGetContents h
   let FilePaths xs = fromByteString msg
-  case xs of
-    Left e -> error $ show e
-    Right fps -> return fps
+  return xs
 
 -- Request to write a file. Accepts a local and a remote filepath.
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
@@ -111,6 +109,7 @@ readFileReq host h localPath remoteFile = do
         finalReadBlock fcons (last addrs))
       return True
 
+--Standard way of connecting to a Server using sockets
 openConnection :: Host -> Port -> IO Socket
 openConnection host port = do
   addrInfo <- getAddrInfo Nothing (Just host) (Just port)

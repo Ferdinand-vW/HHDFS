@@ -7,11 +7,7 @@ where
 import System.IO
 import Control.Concurrent (threadDelay)
 import System.FilePath (takeFileName)
-import System.Directory (createDirectoryIfMissing)
-import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Binary(encode,decode)
-import Control.Monad (forever,void)
+import Control.Monad (void)
 import Network
 
 import ClientAPI
@@ -25,36 +21,46 @@ client host port = do
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
   hSetBuffering h NoBuffering
   hSetBinaryMode h True
-  void $ case words input of
-          ["show"] -> do
-            putStrLn "Contents:"
-            fsimage <- listFilesReq h
-            showFSImage fsimage
-          ["write",localFile,remotePath] -> do
-            writeFileReq host h localFile remotePath
-            putStrLn "Done writing" --Write a file onto the network
-          ["read",path] -> do
-            readFileReq host h (localPath path) path
-            putStrLn "Done reading"--Retrieve the file
-              --writeToDisk path mfdata --Write file to diskk
-          ["quit"] -> do
-            putStrLn "Closing program..."
-            threadDelay 2000000 --Print a message and after 2 seconds quit
-          _ -> (putStrLn "Input was not a valid command.")
+  cont <- case words input of
+            ["show"] -> do
+              eFsImage <- listFilesReq h --Get the filesystem image from the network
+              handleFsImage eFsImage --Print the results to stdout
+              return True
+            ["write",localFile,remotePath] -> do
+              writeFileReq host h localFile remotePath
+              putStrLn "Finished writing" --Write a file onto the network
+              return True
+            ["read",path] -> do
+              exists <- readFileReq host h (localPath path) path --Retrieve the file
+              fileExists exists
+              return True
+            ["quit"] -> do
+              putStrLn "Closing program..."
+              threadDelay 2000000 --Print a message and after 2 seconds quit
+              return False
+            _ -> do
+              (putStrLn "Input was not a valid command.")
+              return True
   hClose h
-  client host port
 
+  if cont --Determine whether we continue or not
+    then client host port
+    else return ()
+
+--Either print out the error or print out all filenames
+handleFsImage :: Either ClientError [FilePath] -> IO ()
+handleFsImage (Left err) = putStrLn $ show err
+handleFsImage (Right fp) = showFsImage fp
 
 --Simply prints out all the filenames prefixed with 2 spaces
-showFSImage :: [FilePath] -> IO ()
-showFSImage fsimage = mapM_ (\x -> putStrLn $ "  " ++ x) fsimage
+showFsImage :: [FilePath] -> IO ()
+showFsImage fsimage = do
+  putStrLn "Contents:"
+  mapM_ (\x -> putStrLn $ "  " ++ x) fsimage
 
-writeToDisk :: FilePath -> Maybe FileData -> IO ()
-writeToDisk fpath mfdata = case mfdata of
-  Nothing -> putStrLn "Could not find file on network"
-  Just fdata -> do
-      createDirectoryIfMissing False "./local"
-      L.writeFile ("./local/" ++ takeFileName fpath) fdata
+fileExists :: Bool -> IO ()
+fileExists False = putStrLn "Could not find file on network"
+fileExists True  = putStrLn "Successfully read file." 
 
 localPath :: String -> String
 localPath fpath = "./local/" ++ takeFileName fpath

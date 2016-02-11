@@ -1,17 +1,19 @@
 module Test where
 
-import System.IO
-import System.Directory
-import GHC.Conc (forkIO)
-import Control.Distributed.Process
-import Network
-import System.Random (mkStdGen, randoms)
-import Control.Monad (zipWithM_)
-import System.FilePath (takeFileName)
+
+
+import           Control.Monad (zipWithM_)
+import           Control.Concurrent.Async
+import           Control.Distributed.Process
+import           GHC.Conc (forkIO)
+import           Network
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
-import System.Clock
-import Control.Concurrent.Async
+import           System.Clock
+import           System.IO
+import           System.Directory
+import           System.FilePath (takeFileName)
+import           System.Random (mkStdGen, randoms)
 
 import Messages (FileData, FileName, Host, Port)
 import ClientAPI (listFilesReq,writeFileReq,readFileReq)
@@ -91,7 +93,7 @@ testRead host port fName = do
       local = "local/" ++ filename
   putStrLn $ "read " ++ fName
   file <- readFileReq host h local fName
-  -- We do not account for the time taken to write a file to disk when running tests
+  -- We do not account for the time taken to write a file to disk when running tests (ClientAPI has changed since then)
   hClose h
 
 getHandle :: Host -> Port -> IO Handle

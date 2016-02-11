@@ -6,22 +6,20 @@ setupNameNode
 )
 where
 
-import Control.Concurrent(threadDelay,forkIO)
-import System.Directory (createDirectoryIfMissing)
-import Control.Concurrent.MVar
-import Control.Distributed.Process hiding(handleMessage)
-import Control.Distributed.Process.Node
-import Control.Distributed.Process.Internal.Types
-import Network.Transport hiding (connect,send,receive)
-import Network.Transport.TCP
+import           Control.Exception
+import           Control.Monad (forever)
+import           Control.Concurrent(threadDelay,forkIO)
+import           Control.Distributed.Process
+import           Control.Distributed.Process.Node
+import           Network.Transport hiding (connect,send,receive)
+import           Network.Transport.TCP
+import           Network hiding(sClose)
+import           Network.Socket
+import           Network.BSD
 import qualified Data.ByteString.Char8 as B
-import Data.Binary (encode,decode)
-import System.IO
-import Network hiding(sClose)
-import Network.Socket
-import Network.BSD
-import Control.Exception
-import Control.Monad (forever)
+import           Data.Binary (encode,decode)
+import           System.IO
+import           System.Directory (createDirectoryIfMissing)
 
 import Messages
 import NameNodeProxy
