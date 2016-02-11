@@ -31,8 +31,7 @@ listFilesReq h = do
   let FilePaths xs = fromByteString msg
   case xs of
     Left e -> error $ show e
-    Right fps -> do
-      return fps
+    Right fps -> return fps
 
 -- Request to write a file. Accepts a local and a remote filepath.
 writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
@@ -69,8 +68,8 @@ writeFileReq host h localFile remotePath = do
 
         closeConnection sock
   case res of
-    Left e -> putStrLn $ show e
-    Right addrs -> do
+    Left e -> print e
+    Right addrs ->
       Streams.withFileAsInput localFile (\fprod -> do --Open a file and convert it into an output stream
         mapM_ (writeBlock fprod) (init addrs) --Write blocks to datanodes
         finalWriteBlock fprod (last addrs)) --For the final block we have to close the file output stream
@@ -85,7 +84,7 @@ readFileReq host h localPath remoteFile = do
 
   let ReadAddress mexists = fromByteString resp
       -- We start reading blocks from the handle
-      readBlock fcons (port,bid) = do
+      readBlock fcons (port,bid) = withSocketsDo $ do
         sock <- openConnection host port
         (prod,cons) <- Streams.socketToStreams sock
 
@@ -95,7 +94,7 @@ readFileReq host h localPath remoteFile = do
 
         closeConnection sock
 
-      finalReadBlock fcons (port,bid) = do
+      finalReadBlock fcons (port,bid) = withSocketsDo $ do
         sock <- openConnection host port
         (prod,cons) <- Streams.socketToStreams sock
 
@@ -130,5 +129,4 @@ openConnection host port = do
   return sock
 
 closeConnection :: Socket -> IO ()
-closeConnection sock = do
-  sClose sock
+closeConnection sock = sClose sock
