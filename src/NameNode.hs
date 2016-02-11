@@ -45,6 +45,7 @@ data NameNode = NameNode
   , randomVar :: TVar StdGen
   }
 
+-- Local folders and file names
 nnConfDir, nnDataDir, fsImageFile, dnMapFile, blockMapFile :: String
 nnConfDir = "./nn_conf/"
 nnDataDir = "./nn_data/"
@@ -196,16 +197,14 @@ handleClients nameNode@NameNode{..} (ListFilesP chan) = do
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
 
 
+-- Pick some pids from the blockmap. If they are not found this means the blocks
+-- are still in the rep map
 pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
 pickPids bMap bid =
   case M.lookup bid bMap of
     Nothing -> retry
     Just a -> return a
 
-
-hopefully a = case a of
-  Nothing -> retry
-  Just a -> return a
 --Whenever we receive a blockreport from a datanode we will have to update
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> STM ()
@@ -269,7 +268,6 @@ selectRandomDataNodes nn@NameNode{..} n datanodes = do
  let (g',r) = randomValues g n datanodes
  writeTVar randomVar g'
  return r
-
 
 randomValues :: (Show a,Eq a) => StdGen -> Int -> [a] -> (StdGen,[a])
 randomValues gen _ [] = (gen,[])

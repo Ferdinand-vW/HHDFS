@@ -10,7 +10,7 @@ readFileReq
 import Control.Distributed.Process
 
 import Data.Functor ((<$>))
-import Control.Monad (foldM, zipWithM_,unless)
+import Control.Monad (foldM, zipWithM_, unless)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified System.IO as IO
@@ -39,40 +39,41 @@ writeFileReq host h localFile remotePath = do
   -- read data from the local file
     -- calculate the number of blocks required
   flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
-  let blockCount = 1 + fromIntegral (flength `div` blockSize)
+  let blockCount = ceiling $ fromIntegral flength / fromIntegral blockSize
 
-  -- send the request to the datanode and wait for a response
-  B.hPutStrLn h $ toByteString $ Write remotePath blockCount
-  resp <- B.hGetContents h
+  unless (blockCount == 0) $ do
+    -- send the request to the datanode and wait for a response
+    B.hPutStrLn h $ toByteString $ Write remotePath blockCount
+    resp <- B.hGetContents h
 
-  let WriteAddress res = fromByteString resp
-      writeBlock fprod (port,bid) = withSocketsDo $ do
-        sock <- openConnection host port --Open a connection to the datanode
-        (prod,cons) <- Streams.socketToStreams sock --Convert the socket into an input and output stream
+    let WriteAddress res = fromByteString resp
+        writeBlock fprod (port,bid) = withSocketsDo $ do
+          sock <- openConnection host port --Open a connection to the datanode
+          (prod,cons) <- Streams.socketToStreams sock --Convert the socket into an input and output stream
 
-        Streams.write (Just $ toByteString $ CDNWrite bid) cons --Send the write message to the datanode
-        Just ok <- Streams.read prod --Wait for confirmation from the datanode to start writing
-        fblockprod <- Streams.takeExactly (fromIntegral blockSize) fprod --Take an exact number of bytes from the file stream
-        Streams.supply fblockprod cons --Send these bytes to the datanode
+          Streams.write (Just $ toByteString $ CDNWrite bid) cons --Send the write message to the datanode
+          Just ok <- Streams.read prod --Wait for confirmation from the datanode to start writing
+          fblockprod <- Streams.takeExactly (fromIntegral blockSize) fprod --Take an exact number of bytes from the file stream
+          Streams.supply fblockprod cons --Send these bytes to the datanode
 
-        closeConnection sock --We can now close the connection
+          closeConnection sock --We can now close the connection
 
-      finalWriteBlock fprod (port,bid) = withSocketsDo $ do
-        sock <- openConnection host port
-        (prod,cons) <- Streams.socketToStreams sock
+        finalWriteBlock fprod (port,bid) = withSocketsDo $ do
+          sock <- openConnection host port
+          (prod,cons) <- Streams.socketToStreams sock
 
-        Streams.write (Just $ toByteString $ CDNWrite bid) cons
-        Just rsp <- Streams.read prod
-        fblockprod <- Streams.takeBytes (fromIntegral blockSize) fprod --Take remaining bytes
-        Streams.connect fblockprod cons --Signal EOF
+          Streams.write (Just $ toByteString $ CDNWrite bid) cons
+          Just rsp <- Streams.read prod
+          fblockprod <- Streams.takeBytes (fromIntegral blockSize) fprod --Take remaining bytes
+          Streams.connect fblockprod cons --Signal EOF
 
-        closeConnection sock
-  case res of
-    Left e -> print e
-    Right addrs ->
-      Streams.withFileAsInput localFile (\fprod -> do --Open a file and convert it into an output stream
-        mapM_ (writeBlock fprod) (init addrs) --Write blocks to datanodes
-        finalWriteBlock fprod (last addrs)) --For the final block we have to close the file output stream
+          closeConnection sock
+    case res of
+      Left e -> print e
+      Right addrs ->
+        Streams.withFileAsInput localFile (\fprod -> do --Open a file and convert it into an output stream
+          mapM_ (writeBlock fprod) (init addrs) --Write blocks to datanodes
+          finalWriteBlock fprod (last addrs)) --For the final block we have to close the file output stream
 
 -- Request to read a file. Accepts the remote filepath
 readFileReq :: Host -> Handle -> FilePath -> FilePath -> IO Bool

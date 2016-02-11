@@ -29,8 +29,6 @@ import DataNodeProxy
 
 type Addr = String
 
-
-
 setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
 setupClient p host port = do
   createDirectoryIfMissing False "./local"
