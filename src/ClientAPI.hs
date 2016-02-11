@@ -18,8 +18,6 @@ import Data.Binary(decode,encode)
 import Network hiding (sClose)
 import Network.Socket
 import System.IO
-import qualified Pipes.ByteString as PB
-import qualified Pipes as P
 import System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
 
@@ -108,7 +106,7 @@ readFileReq host h localPath remoteFile = do
         closeConnection sock
   case mexists of
     Left e -> do
-      putStrLn (show e)
+      print e
       return False
     Right addrs -> do
       hClose h

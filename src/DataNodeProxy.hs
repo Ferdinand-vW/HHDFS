@@ -8,8 +8,6 @@ import qualified System.IO as IO
 import Data.Binary (encode,decode)
 import Control.Monad (forever)
 import qualified Network.Socket as S
-import qualified Pipes.ByteString as PB
-import qualified Pipes as P
 import System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
 
