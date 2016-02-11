@@ -76,7 +76,8 @@ waitForConnections host port pid = do
   socket <- liftIO $ listenOn' (PortNumber $ fromIntegral $ 1 + read port)
   datanodeproxy socket pid
 
-
+--Pretty much a copy-paste from the Network package. We only changed the number of
+--queued connections
 listenOn' (PortNumber port) = do
     proto <- getProtocolNumber "tcp"
     bracketOnError

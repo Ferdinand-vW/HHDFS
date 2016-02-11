@@ -15,8 +15,6 @@ import Messages
 -- thread to handle the clients requests.
 namenodeproxy :: Socket -> ProcessId -> Process ()
 namenodeproxy socket pid = do
-  --liftIO $ S.setSocketOption socket S.RecvTimeOut 0
-  liftIO $ S.setSocketOption socket S.ReuseAddr 1
   forever $ do
     (h,_,_) <- liftIO $ accept socket
     spawnLocal $ handleClient h pid
@@ -27,8 +25,8 @@ handleClient h pid = do
   liftIO $ hSetBuffering h NoBuffering
   msg <- liftIO $ B.hGetLine h
   handleMessage (fromByteString msg) h pid
-  -- close the handle once the message is handled
-  --liftIO $ hClose h
+  --close the handle once the message is handled
+  liftIO $ hClose h
 
 -- We simply forward every message to the Datanode process and wait for the
 -- response on a channel. Once we recieve the response we send it back to
@@ -42,19 +40,12 @@ handleMessage ListFiles h pid  = do
 
 handleMessage (Read fp) h pid = do
   (sendport,receiveport) <- newChan
-  liftIO $ putStrLn "send read to namenode"
   send pid (ReadP fp sendport)
   resp <- receiveChan receiveport
-  liftIO $ putStrLn "send read addresses"
   liftIO $ B.hPutStrLn h $ toByteString $ ReadAddress resp
-  liftIO $ putStrLn $ show $ toByteString $ ReadAddress resp
-  liftIO $ putStrLn "done sending"
 
 handleMessage (Write fp bc) h pid = do
   (sendport,receiveport) <- newChan
   send pid (WriteP fp bc sendport)
   resp <- receiveChan receiveport
-  liftIO $ putStrLn "send write addresses"
   liftIO $ B.hPutStrLn h $ toByteString $ WriteAddress resp
-  liftIO $ putStrLn $ show $ toByteString $ WriteAddress resp
-  liftIO $ putStrLn "done sending"

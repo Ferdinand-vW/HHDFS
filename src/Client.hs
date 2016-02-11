@@ -30,11 +30,16 @@ client host port = do
             putStrLn "Contents:"
             fsimage <- listFilesReq h
             showFSImage fsimage
-          ["write",localFile,remotePath] -> writeFileReq host h localFile remotePath >> putStrLn "Done writing" --Write a file onto the network
+          ["write",localFile,remotePath] -> do
+            writeFileReq host h localFile remotePath
+            putStrLn "Done writing" --Write a file onto the network
           ["read",path] -> do
-              readFileReq host h (localPath path) path >> putStrLn "Done reading"--Retrieve the file
+            readFileReq host h (localPath path) path
+            putStrLn "Done reading"--Retrieve the file
               --writeToDisk path mfdata --Write file to diskk
-          ["quit"] -> putStrLn "Closing program..." >> threadDelay 2000000 --Print a message and after 2 seconds quit
+          ["quit"] -> do
+            putStrLn "Closing program..."
+            threadDelay 2000000 --Print a message and after 2 seconds quit
           _ -> (putStrLn "Input was not a valid command.")
   hClose h
   client host port
