@@ -7,19 +7,13 @@ writeFileReq,
 readFileReq
 ) where
 
-import Control.Distributed.Process
-
-import Data.Functor ((<$>))
-import Control.Monad (foldM, zipWithM_, unless)
+import           Control.Distributed.Process
+import           Network.Socket
+import           Control.Monad(unless)
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as L
-import qualified System.IO as IO
-import Data.Binary(decode,encode)
-import Network hiding (sClose)
-import Network.Socket
-import System.IO
-import System.IO.Streams (InputStream, OutputStream)
 import qualified System.IO.Streams as Streams
+import           System.IO.Streams (InputStream, OutputStream)
+import           System.IO
 
 import Messages
 
@@ -38,14 +32,15 @@ writeFileReq :: Host -> Handle -> FilePath -> FilePath -> IO ()
 writeFileReq host h localFile remotePath = do
   -- read data from the local file
     -- calculate the number of blocks required
-  flength <- IO.withFile localFile IO.ReadMode IO.hFileSize
+  flength <- withFile localFile ReadMode hFileSize
   let blockCount = ceiling $ fromIntegral flength / fromIntegral blockSize
-
+  putStrLn $ show blockCount
   unless (blockCount == 0) $ do
     -- send the request to the datanode and wait for a response
-    B.hPutStrLn h $ toByteString $ Write remotePath blockCount
+    let wf = Write remotePath blockCount
+    B.hPutStrLn h $ toByteString wf
     resp <- B.hGetContents h
-
+    putStrLn $ show resp
     let WriteAddress res = fromByteString resp
         writeBlock fprod (port,bid) = withSocketsDo $ do
           sock <- openConnection host port --Open a connection to the datanode
@@ -115,11 +110,6 @@ readFileReq host h localPath remoteFile = do
         mapM_ (readBlock fcons) (init addrs)
         finalReadBlock fcons (last addrs))
       return True
-
-chunksOf :: Int -> L.ByteString -> [L.ByteString]
-chunksOf n s = case L.splitAt (fromIntegral n) s of
-  (a,b) | L.null a  -> []
-        | otherwise -> a : chunksOf n b
 
 openConnection :: Host -> Port -> IO Socket
 openConnection host port = do
