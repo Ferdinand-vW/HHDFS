@@ -4,10 +4,6 @@ osascript <<-eof
 tell application "iTerm"
   set myterm to (make new terminal)
 
-  tell application "System Events"
-    keystroke "ù" using command down
-  end tell
-
   tell myterm
     launch session "Default session"
     tell the last session
