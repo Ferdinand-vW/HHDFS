@@ -18,11 +18,16 @@ So do not expect HHDFS to be very robust. Take a look at our features to see wha
 
 The architecture of HHDFS is mostly a copy of HDFS. We therefore recommend you to read the [documentation](https://hadoop.apache.org/docs/r1.2.1/hdfs_design.html)
 
-The only change to the architecture we made is adding a 'proxy' to each node. The proxy sits between the
-client and the Namenode/Datanode. It is used to allow clients to remotely connect to the network.
+We made various simplifications and some changes to the architecture described in the docs.
 
+The replication factor, for example. is not something that is specified for each file but is instead fixed on the Namenode side.
+
+Most of the features described in the Robustness section of HDFS have not been implemented.
+There is also currently no notion of a Heartbeat in HHDFS although it could easily be added.
+
+A change to the architecture we made is adding a 'proxy' to each node.
+The proxy sits between the client and the Namenode/Datanode. It is used to allow clients to remotely connect to the network.
 The proxy of the Namenode simply passed any received messages from the client to the Namenode and it also sends any responses from the Namenode back to the client.
-
 The proxy of the Datanode also does reading from and writing to the local filesystem.
 
 # Installation
