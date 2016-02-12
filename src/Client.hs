@@ -16,7 +16,6 @@ import Messages
 -- Example client
 client :: Host -> Port -> IO ()
 client host port = do
-  hSetBuffering stdout NoBuffering
   putStr "> "
   hFlush stdout
   input <- getLine --parse some input
