@@ -1,7 +1,7 @@
 module NodeInitialization
 (
 setupClient,
-setupNode,
+setupDataNode,
 setupNameNode
 )
 where
@@ -29,40 +29,44 @@ type Addr = String
 
 setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
 setupClient p host port = do
+  hSetBuffering stdout NoBuffering
+  putStrLn "Starting Client..."
   createDirectoryIfMissing False "./local"
   --First we try to connect to the proxy server
   p host port
   return ()
 
-setupNode :: (Port -> ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
-setupNode p host port addr = do
-    Right t <- createTransport host port defaultTCPParameters --setup transport layer for the node
-    node <- newLocalNode t initRemoteTable --create a new localnode using the transport layer
-    let nnAddr = EndPointAddress $ B.pack addr
-        nodeid = NodeId nnAddr --Create a NodeId for the NameNode
-    runProcess node $ do --We start a process on the node
-      whereisRemoteAsync nodeid "NameNodePid" --See if we can find the NameNode and if so get his ProcessId
-      WhereIsReply _ mpid <- expect :: Process WhereIsReply
-      case mpid of
-          Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
-          Just npid -> do
-            pid <- getSelfPid
-            spawnLocal $ waitForConnections host port pid
-            p port npid --Continue with the given Process and pass it the NameNode ProcessId
+setupDataNode :: (Port -> ProcessId -> Process()) -> Host -> Port -> Addr -> IO ()
+setupDataNode p host port addr = do
+  putStrLn "Starting DataNode..."
+  Right t <- createTransport host port defaultTCPParameters --setup transport layer for the node
+  node <- newLocalNode t initRemoteTable --create a new localnode using the transport layer
+  let nnAddr = EndPointAddress $ B.pack addr
+      nodeid = NodeId nnAddr --Create a NodeId for the NameNode
+  runProcess node $ do --We start a process on the node
+    whereisRemoteAsync nodeid "NameNodePid" --See if we can find the NameNode and if so get his ProcessId
+    WhereIsReply _ mpid <- expect :: Process WhereIsReply
+    case mpid of
+        Nothing -> liftIO $ putStrLn $ "Could not connect to NameNode with address " ++ addr
+        Just npid -> do
+          pid <- getSelfPid
+          spawnLocal $ waitForConnections host port pid
+          p port npid --Continue with the given Process and pass it the NameNode ProcessId
 
 setupNameNode :: Process () -> Host -> Port -> IO ()
 setupNameNode p host port = do
-    et <- createTransport host port defaultTCPParameters
-    case et of
-      Left f -> putStrLn $ show f
-      Right t -> do
-        node <- newLocalNode t initRemoteTable
-        runProcess node $ do
-            pid <- getSelfPid --Dynamically register the NameNode's ProcessId
-            spawnLocal $ listenForClients host port pid
+  putStrLn "Starting NameNode..."
+  et <- createTransport host port defaultTCPParameters
+  case et of
+    Left f -> putStrLn $ show f
+    Right t -> do
+      node <- newLocalNode t initRemoteTable
+      runProcess node $ do
+          pid <- getSelfPid --Dynamically register the NameNode's ProcessId
+          spawnLocal $ listenForClients host port pid
 
-            register "NameNodePid" pid
-            p
+          register "NameNodePid" pid
+          p
 
 listenForClients :: Host -> Port -> ProcessId -> Process ()
 listenForClients host port pid = do

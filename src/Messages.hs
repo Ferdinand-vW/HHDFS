@@ -2,13 +2,14 @@
 
 module Messages where
 
-import Data.Typeable (Typeable)
-import GHC.Generics (Generic)
-import Data.Binary (Binary)
-import Control.Distributed.Process
+import           GHC.Generics (Generic)
+import           Control.Distributed.Process
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Binary(decode,encode)
+import           Data.Binary(decode,encode)
+import           Data.Typeable (Typeable)
+import           Data.Binary (Binary)
+import qualified Data.Set as S
 
 type DataNodeId = Int
 type BlockId = Int
@@ -33,7 +34,7 @@ data ClientConnection = Response ProcessId
 data HandShake = HandShake
   { dataNodePid    :: ProcessId
   , dataNodeUid    :: Int
-  , dataNodeBlocks :: [BlockId]
+  , dataNodeBlocks :: S.Set BlockId
   , proxyPort      :: Port
   }
   | WhoAmI (SendPort DataNodeId)
@@ -76,7 +77,7 @@ data IntraNetwork = Repl BlockId [ProcessId]
                   | WriteFile BlockId FileData [ProcessId]
   deriving (Typeable, Generic, Show)
 
-data BlockReport = BlockReport DataNodeId [BlockId]
+data BlockReport = BlockReport DataNodeId (S.Set BlockId)
   deriving (Typeable, Generic)
 
 instance Binary ProxyToNameNode

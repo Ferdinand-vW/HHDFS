@@ -16,6 +16,7 @@ import Messages
 -- Example client
 client :: Host -> Port -> IO ()
 client host port = do
+  putStr "> "
   input <- getLine --parse some input
 
   h <- connectTo host (PortNumber $ fromIntegral $ read port)

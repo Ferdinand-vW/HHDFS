@@ -32,13 +32,13 @@ writeFileReq host h localFile remotePath = do
     -- calculate the number of blocks required
   flength <- withFile localFile ReadMode hFileSize
   let blockCount = ceiling $ fromIntegral flength / fromIntegral blockSize
-  putStrLn $ show blockCount
+  
   unless (blockCount == 0) $ do
     -- send the request to the datanode and wait for a response
     let wf = Write remotePath blockCount
     B.hPutStrLn h $ toByteString wf
     resp <- B.hGetContents h
-    putStrLn $ show resp
+
     let WriteAddress res = fromByteString resp
         writeBlock fprod (port,bid) = withSocketsDo $ do
           sock <- openConnection host port --Open a connection to the datanode
@@ -102,7 +102,6 @@ readFileReq host h localPath remoteFile = do
       print e
       return False
     Right addrs -> do
-      hClose h
       -- fold readblocks to build up the file from all the received blocks
       Streams.withFileAsOutput localPath (\fcons -> do
         mapM_ (readBlock fcons) (init addrs)
