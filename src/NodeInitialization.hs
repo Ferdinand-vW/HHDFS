@@ -29,7 +29,6 @@ type Addr = String
 
 setupClient :: (Host -> Port -> IO()) -> Host -> Port -> IO ()
 setupClient p host port = do
-  hSetBuffering stdout NoBuffering
   putStrLn "Starting Client..."
   createDirectoryIfMissing False "./local"
   --First we try to connect to the proxy server

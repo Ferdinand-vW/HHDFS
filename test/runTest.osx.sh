@@ -9,7 +9,7 @@ tell application "iTerm"
     tell the last session
       set name to "TestClient"
       write text "cd \"$wd\"/TestClient"
-      write text "./hhdfs test 127.0.0.1 44445q"
+      write text "./hhdfs test 127.0.0.1 44445"
     end tell
   end tell
 end tell

@@ -17,6 +17,7 @@ import Messages
 client :: Host -> Port -> IO ()
 client host port = do
   putStr "> "
+  hFlush stdout
   input <- getLine --parse some input
 
   h <- connectTo host (PortNumber $ fromIntegral $ read port)
@@ -67,7 +68,7 @@ showFsImage fsimage = do
 
 fileExists :: Bool -> IO ()
 fileExists False = putStrLn "Could not find file on network"
-fileExists True  = putStrLn "Successfully read file." 
+fileExists True  = putStrLn "Successfully read file."
 
 localPath :: String -> String
 localPath fpath = "./local/" ++ takeFileName fpath
