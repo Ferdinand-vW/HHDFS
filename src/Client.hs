@@ -22,6 +22,12 @@ client host port = do
   hSetBuffering h NoBuffering
   hSetBinaryMode h True
   cont <- case words input of
+            ["help"] -> do
+              putStrLn "show : Lists all files on the network"
+              putStrLn "write local remote : Enter a local file path and a file name to write a file to the network"
+              putStrLn "read remote : Enter a file on the network to read it from the network"
+              putStrLn "quit : Closes the client application"
+              return True
             ["show"] -> do
               eFsImage <- listFilesReq h --Get the filesystem image from the network
               handleFsImage eFsImage --Print the results to stdout
