@@ -3,9 +3,8 @@
 Haskell Hadoop Distributed File System
 
 HHDFS is an re-implementation of HDFS in Haskell.
-As this is a University related project, our main focus will be on the performance and scalability
-of HHDFS. So do not expect HHDFS to be very robust. Take a look at our features to see what we have
-implemented.
+As this is a University related project, our main focus will be on the performance and scalability of HHDFS.
+So do not expect HHDFS to be very robust. Take a look at our features to see what we have implemented.
 
 
 # Features
@@ -20,10 +19,11 @@ implemented.
 The architecture of HHDFS is mostly a copy of HDFS. We therefore recommend you to read the [documentation](https://hadoop.apache.org/docs/r1.2.1/hdfs_design.html)
 
 The only change to the architecture we made is adding a 'proxy' to each node. The proxy sits between the
-client and the Namenode/Datanode. It is used to allow clients to remotely connect to the network. The proxy
-of the Namenode simply passed any received messages from the client to the Namenode and it also sends any
-responses from the Namenode back to the client. The proxy of the Datanode also does reading from and writing
-to the local filesystem.
+client and the Namenode/Datanode. It is used to allow clients to remotely connect to the network.
+
+The proxy of the Namenode simply passed any received messages from the client to the Namenode and it also sends any responses from the Namenode back to the client.
+
+The proxy of the Datanode also does reading from and writing to the local filesystem.
 
 # Installation
 
@@ -58,9 +58,9 @@ Finally you can start up a Client only suppling the host and port of the NameNod
 
     ./hhdfs client 127.0.0.1 44444
 
-It is possible for the Client to not be on the same Network as the NameNode and DataNodes,
-but you have to make sure yourself that any messages from the Client to the NameNode or
-DataNode are correctly forwarded (e.g. port forwarding).
+It is possible for the Client to not be on the same Network as the Namenode and Datanodes,
+but you have to make sure yourself that any messages from the Client to the Namenode or
+Datanode are correctly forwarded (e.g. port forwarding).
 
 ## Using our scripts to startup a network:
 
@@ -88,7 +88,7 @@ These scripts have proven to be working on our own systems: Linux Mint 17.3 and 
 
 **./runTest.sh** will run the test client. It will immediately start a test. Simply press enter to run the next. There is a total of three tests.
 
-#### LINUX:
+#### Linux:
 **./run.linux.sh** will start a Namenode, a number of Datanodes and a client. This script
 assumes you are using the gnome-terminal
 
