@@ -20,10 +20,10 @@ The architecture of HHDFS is mostly a copy of HDFS. We therefore recommend you t
 
 We made various simplifications and some changes to the architecture described in the docs.
 
-The replication factor, for example. is not something that is specified for each file but is instead fixed on the Namenode side.
+The replication factor, for example, is not something that is specified for each file but is instead fixed on the Namenode side.
 
 Most of the features described in the Robustness section of HDFS have not been implemented.
-There is also currently no notion of a Heartbeat in HHDFS although it could easily be added.
+There is also currently no notion of a Heartbeat in HHDFS, although it could easily be added.
 
 A change to the architecture we made is adding a 'proxy' to each node.
 The proxy sits between the client and the Namenode/Datanode. It is used to allow clients to remotely connect to the network.
@@ -73,7 +73,7 @@ Datanode are correctly forwarded (e.g. port forwarding).
 #### Linux:
 Before being able to start the network you need to ensure that you have a working gnome-terminal, which
 should be the default terminal. Then you have to add a profile to the terminal named **"KEEPOPEN"**. The only thing
-you have to change is that after executing a script the terminal will remain open. Next you can simply do the following:
+you have to change is that after executing a script the terminal will remain open.
 
 #### OSX:
 The startup script just assume you are using iTerm as you terminal application. The run.osx.sh can be easily adapted to whatever terminal application you are currently using.
