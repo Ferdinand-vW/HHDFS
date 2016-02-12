@@ -11,13 +11,14 @@ import           System.Directory (doesFileExist, removeFile, createDirectoryIfM
 import           Control.Monad (when, forever, unless, join)
 import           Data.Binary
 import           Data.Typeable
+import qualified Data.Set as S
 
 
 import Messages
 
 data DataNode = DataNode {
     dnId :: DataNodeId
-  , blockIds :: TVar [BlockId]
+  , blockIds :: TVar (S.Set BlockId)
   , procChan :: TChan (Process ())
 }
 
@@ -75,7 +76,7 @@ handleMessages nnid dn@DataNode{..} = forever $ do
   spawnLocal $
     case msg of
       Repl bid pids -> do
-        liftIO $ putStrLn $ "received repl " ++ show pids
+        liftIO $ putStrLn $ "Received replication request from NameNode for BlockId: " ++ show bid
         --liftIO $ putStrLn $ "file name " ++ (getFileName bid)
         file <- liftIO $ L.readFile (getFileName bid)
         --liftIO $ putStrLn $ " gets here"
@@ -85,11 +86,11 @@ handleMessages nnid dn@DataNode{..} = forever $ do
             sendSTM dn (head pids) (WriteFile bid file (tail pids))
           )
       WriteFile bid fdata pids -> do
-        --liftIO $ putStrLn "received write request from datanode"
+        liftIO $ putStrLn $ "Received replication request from DataNode for BlockId: " ++ show bid
         liftIO $ B.writeFile (getFileName bid) (L.toStrict fdata)
         bids <- liftIO $ atomically $ readTVar blockIds
         --liftIO $ putStrLn $ show bids
-        liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
+        liftIO $ atomically $ modifyTVar blockIds $ \xs -> S.insert bid xs
         unless (null pids) (
           liftIO $ atomically $ do
             sendSTM dn (head pids) (WriteFile bid fdata (tail pids))
@@ -103,16 +104,7 @@ handleProxyMessages nnid dn@DataNode{..} =
     spawnLocal $
       case msg of
         CDNWriteP bid -> do
-          liftIO $ putStrLn "updating blockids"
-          liftIO $ atomically $ modifyTVar blockIds $ \xs -> bid : xs
-        CDNDeleteP bid -> do
-          let fileName = getFileName bid
-          fileExists <- liftIO $ doesFileExist fileName
-          when fileExists (
-            liftIO $ atomically $ do
-              writeIOChan dn (liftIO $ removeFile (getFileName bid))
-              modifyTVar blockIds $ \xs -> filter (/=bid) xs
-            )
+          liftIO $ atomically $ modifyTVar blockIds $ \xs -> S.insert bid xs
 
 -- We send block reports as soon as we detect a change in the datanode blockIds
 sendBlockReports :: ProcessId -> DataNode -> Process ()
@@ -122,9 +114,10 @@ sendBlockReports nnid dn@DataNode{..} = forever $ do
   where
     checkStatus oldbids = liftIO $ atomically $ do
       newbids <- readNewBlockIds dn oldbids --Blocking call, waits for blockIds to be changed
+      writeIOChan dn $ liftIO $ putStrLn "Sending blockreport to NameNode"
       sendSTM dn nnid (BlockReport dnId newbids)
 
--- We persit the blockIds every time we add a new one
+-- We persist the blockIds every time we add a new one
 writeBlockReports :: DataNode -> Process ()
 writeBlockReports dn@DataNode{..} = forever $ liftIO $ atomically $ do
     bids <- readTVar blockIds
@@ -132,7 +125,7 @@ writeBlockReports dn@DataNode{..} = forever $ liftIO $ atomically $ do
     writeIOChan dn $ liftIO $ writeDataNodeBlocks newbids
 
 -- Retries untill the block ids have changed
-readNewBlockIds :: DataNode -> [BlockId] -> STM [BlockId]
+readNewBlockIds :: DataNode -> S.Set BlockId -> STM (S.Set BlockId)
 readNewBlockIds dn@DataNode{..} oldbids = do
     newbids <- readTVar blockIds
     if newbids /= oldbids
@@ -146,10 +139,10 @@ readDataNodeId = decodeFile dnConfFile
 writeDataNodeId :: DataNodeId -> IO ()
 writeDataNodeId = encodeFile dnConfFile
 
-readDataNodeBlocks :: IO [BlockId]
+readDataNodeBlocks :: IO (S.Set BlockId)
 readDataNodeBlocks = decodeFile dnBlockFile
 
-writeDataNodeBlocks :: [BlockId] -> IO ()
+writeDataNodeBlocks :: S.Set BlockId -> IO ()
 writeDataNodeBlocks = encodeFile dnBlockFile
 
 verifyConfig :: ProcessId -> Process ()
@@ -161,10 +154,10 @@ verifyConfig nnid = do
     res <- receiveChan receivePort -- Recieve the ID from the namenode and store it locally
     liftIO $ writeDataNodeId res
 
-readBlocks :: IO [BlockId]
+readBlocks :: IO (S.Set BlockId)
 readBlocks = do
   fileExist <- doesFileExist dnBlockFile
-  unless fileExist $ writeDataNodeBlocks []
+  unless fileExist $ writeDataNodeBlocks S.empty
   readDataNodeBlocks
 
 getFileName :: BlockId -> FilePath

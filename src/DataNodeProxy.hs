@@ -20,7 +20,6 @@ datanodeproxy :: Socket -> ProcessId -> Process ()
 datanodeproxy socket pid = do
   forever $ do
     (sock,_) <- liftIO $ accept socket
-    liftIO $ putStrLn "Accepted connection"
     spawnLocal $ do
       handleClient sock pid
       liftIO $ sClose sock
@@ -36,7 +35,7 @@ handleClient sock pid = do
 -- If the client asks to read a file the proxy will return it directly to him
 handleMessage :: ClientToDataNode -> (InputStream B.ByteString,OutputStream B.ByteString) -> ProcessId -> Process ()
 handleMessage (CDNRead bid) (prod,cons) pid = liftIO $ do
-  putStrLn $ "Received read for " ++ show bid
+  putStrLn $ "Received read request for BlockId: " ++ show bid
   Streams.withFileAsInput (getFileName bid) (\fprod -> do
     Streams.connect fprod cons)
 
@@ -45,7 +44,7 @@ handleMessage (CDNRead bid) (prod,cons) pid = liftIO $ do
 handleMessage (CDNWrite bid) (prod,cons) pid = do
   liftIO $ do
     Streams.write (Just $ toByteString OK) cons
-    putStrLn $ "Received write of " ++ show bid
+    putStrLn $ "Received write request for BlockId: " ++ show bid
     Streams.withFileAsOutput (getFileName bid) (\fcons -> do
       Streams.connect prod fcons
       )

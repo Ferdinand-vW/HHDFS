@@ -103,20 +103,21 @@ nameNode = do
       , match $ \(handShake :: HandShake) ->
           liftIO $ atomically $ handleDataNodes nn handShake
       , match $ \(blockreport :: BlockReport) ->
-          liftIO $ atomically $ handleBlockReport nn blockreport
+          void $ spawnLocal (liftIO $ atomically $ handleBlockReport nn blockreport)
       ]
 
 -- A Datanode can send us two kind of messages. In a HandShake the dn tells us
 -- his identity. We add the datanode to the dataNodeList and his blocks to the block map
 handleDataNodes :: NameNode -> HandShake -> STM ()
 handleDataNodes nameNode@NameNode{..} (HandShake pid dnId bids address) = do
+  writeIOChan nameNode $ liftIO $ putStrLn $ "DataNode " ++ show dnId ++ " has connected on port " ++ address
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
   dNodes <- readTVar dataNodes
   dnIdAddrs <- readTVar dnIdAddrMap
   let newMap = M.insert dnId pid idPidMap
       dnIdSet = S.singleton dnId --Share this set
-      bidMap = M.fromList $ map (\x -> (x,dnIdSet)) bids --make tuples of a blockId and the dnIdSet,
+      bidMap = M.fromList $ map (\x -> (x,dnIdSet)) (S.toList bids) --make tuples of a blockId and the dnIdSet,
                                                          --then use that to construct a Map
       newBlockMap = M.unionWith S.union bMap bidMap --Add all blockId's of the current DataNode to the BlockMap
       dnAddressMap = M.insert dnId address dnIdAddrs
@@ -137,6 +138,7 @@ handleDataNodes nameNode@NameNode{..} (WhoAmI chan) = do
 -- Handle messages from the namenode proxy
 handleClients :: NameNode -> ProxyToNameNode -> STM ()
 handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
+  writeIOChan nameNode $ liftIO $ putStrLn $ "Received write request of file: " ++ fp
   dNodes <- readTVar dataNodes
   idPidMap <- readTVar dnIdPidMap
   bMap <- readTVar blockMap
@@ -170,9 +172,9 @@ handleClients nameNode@NameNode{..} (WriteP fp blockCount chan) = do
 
 
 handleClients nameNode@NameNode{..} (ReadP fp chan) = do
+  writeIOChan nameNode $ liftIO $ putStrLn $ "Received read request for file: " ++ fp
   fsImg <- readTVar fsImage
   dnIdAddrs <- readTVar dnIdAddrMap
-  writeIOChan nameNode $ liftIO $ putStrLn "test"
   case M.lookup fp fsImg of
     Nothing -> sendChanSTM nameNode chan (Left FileNotFound)
     Just bids -> do
@@ -186,20 +188,24 @@ handleClients nameNode@NameNode{..} (ReadP fp chan) = do
       -- If we dont find them yet, this means they are currently being replicated
       -- so we call retry. As soon as the replication is over this transaction will be rerun
       -- and the blocks will all be found.
-      mpids <- forM bids $ pickPids bMap
-      let mpidsnbids = zip mpids bids
-      let res = map (\(dnodeIds, bid) -> (fromJust $ M.lookup (S.elemAt 0 dnodeIds) dnIdAddrs, bid)) mpidsnbids
+      mdnIds <- forM bids $ pickDnIds bMap
+      selectedDnodes <- mapM (\sdnIds -> do
+        dNodeL <- selectRandomDataNodes nameNode 1 (S.toList sdnIds)
+        return $ head dNodeL) mdnIds
+      let mdnIdsnbids = zip selectedDnodes bids
+          res = map (\(dnodeId, bid) -> (fromJust $ M.lookup dnodeId dnIdAddrs, bid)) mdnIdsnbids
       sendChanSTM nameNode chan (Right res)
 
 handleClients nameNode@NameNode{..} (ListFilesP chan) = do
+  writeIOChan nameNode $ liftIO $ putStrLn "Received list files request"
   fsImg <- readTVar fsImage
   sendChanSTM nameNode chan (Right $ M.keys fsImg)
 
 
 -- Pick some pids from the blockmap. If they are not found this means the blocks
 -- are still in the rep map
-pickPids :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
-pickPids bMap bid =
+pickDnIds :: BlockMap -> BlockId -> STM (S.Set DataNodeId)
+pickDnIds bMap bid =
   case M.lookup bid bMap of
     Nothing -> retry
     Just a -> return a
@@ -208,6 +214,7 @@ pickPids bMap bid =
 --the repmap and the blockmap.
 handleBlockReport :: NameNode -> BlockReport -> STM ()
 handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
+  writeIOChan nameNode $ liftIO $ putStrLn $ "Received blockreport from DataNode: " ++ show dnodeId
   bMap <- readTVar blockMap
   rMap <- readTVar repMap
   idPidMap <- readTVar dnIdPidMap
@@ -221,7 +228,7 @@ handleBlockReport nameNode@NameNode{..} (BlockReport dnodeId blocks) = do
         (_, True)  -> (M.adjust (S.insert dnodeId) x bl   , rep                              )
         (_, False) -> (M.insert x (S.singleton dnodeId) bl, rep                              )
 
-      (blockmap,repmap) = foldr foldBlocks (bMap,rMap) blocks
+      (blockmap,repmap) = S.fold foldBlocks (bMap,rMap) blocks
       --We are done with incorporating the blockreport into the maps, but we possibly have to move
       --entries from the repmap to the blockmap and vica versa.
       --First we partition both maps on how many ProcessId's contain a BlockId

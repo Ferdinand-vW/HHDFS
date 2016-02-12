@@ -23,7 +23,6 @@ executable hhdfs
   build-depends:       base >=4.2 && <4.9
                      , stm
                      , distributed-process
-                     , distributed-process-simplelocalnet
                      , network-transport-tcp
                      , network-transport
                      , containers
@@ -35,8 +34,6 @@ executable hhdfs
                      , random
                      , clock
                      , async
-                     , pipes
-                     , pipes-bytestring
                      , io-streams
   hs-source-dirs:      src
   default-language:    Haskell2010
