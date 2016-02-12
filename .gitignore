@@ -4,6 +4,8 @@ dn_config
 nn_data
 local
 
+test/**/hhdfs
+
 ## General
 dist
 cabal-dev
